@@ -9,7 +9,7 @@ class Random(common.Module):
 
     def __init__(self, config, act_space, wm, tfstep, reward):
         self.config = config
-        self.act_space = self.act_space
+        self.act_space = act_space
 
     def actor(self, feat):
         shape = feat.shape[:-1] + self.act_space.shape

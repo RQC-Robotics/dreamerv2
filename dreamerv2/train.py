@@ -29,8 +29,7 @@ import common
 
 
 def main():
-    configs = yaml.safe_load((
-                                     pathlib.Path(sys.argv[0]).parent / 'configs.yaml').read_text())
+    configs = yaml.safe_load((pathlib.Path(sys.argv[0]).parent / 'configs.yaml').read_text())
     parsed, remaining = common.Flags(configs=['defaults']).parse(known_only=True)
     config = common.Config(configs['defaults'])
     for name in parsed.configs:
@@ -51,8 +50,9 @@ def main():
         tf.config.experimental.set_memory_growth(gpu, True)
     assert config.precision in (16, 32), config.precision
     if config.precision == 16:
-        from tensorflow.keras.mixed_precision import experimental as prec
-        prec.set_policy(prec.Policy('mixed_float16'))
+#        from tensorflow.keras.mixed_precision import experimental as prec
+        from tensorflow.keras import mixed_precision as prec
+        prec.set_global_policy(prec.Policy('mixed_float16'))
 
     train_replay = common.Replay(logdir / 'train_episodes', **config.replay)
     eval_replay = common.Replay(logdir / 'eval_episodes', **dict(
@@ -78,7 +78,9 @@ def main():
         suite, task = config.task.split('_', 1)
         if suite == 'dmc':
             env = common.DMC(
-                task, config.action_repeat, config.render_size, config.dmc_camera)
+                task, config.action_repeat, config.render_size, config.dmc_camera,
+                pn_number=config.pn_number
+            )
             env = common.NormalizeAction(env)
         elif suite == 'atari':
             env = common.Atari(
@@ -126,7 +128,7 @@ def main():
         make_async_env = lambda mode: common.Async(
             functools.partial(make_env, mode), config.envs_parallel)
         train_envs = [make_async_env('train') for _ in range(config.envs)]
-        eval_envs = [make_async_env('eval') for _ in range(eval_envs)]
+        eval_envs = [make_async_env('eval') for _ in range(num_eval_envs)]
     act_space = train_envs[0].act_space
     obs_space = train_envs[0].obs_space
     train_driver = common.Driver(train_envs)

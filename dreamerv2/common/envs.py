@@ -4,7 +4,6 @@ import sys
 import threading
 import traceback
 
-import cloudpickle
 import gym
 import numpy as np
 
@@ -72,7 +71,7 @@ class GymWrapper:
 
 class DMC:
 
-    def __init__(self, name, action_repeat=1, size=(64, 64), camera=None):
+    def __init__(self, name, action_repeat=1, size=(64, 64), camera=None, pn_number=100):
         os.environ['MUJOCO_GL'] = 'egl'
         domain, task = name.split('_', 1)
         if domain == 'cup':  # Only domain with multiple words.
@@ -95,6 +94,14 @@ class DMC:
                 locom_rodent_two_touch=1,
             ).get(name, 0)
         self._camera = camera
+
+        from .point_cloud_utils import PointCloudGenerator
+        self._pn_number = pn_number
+        self._pcg = PointCloudGenerator(
+            pn_number=pn_number,
+            cameras_params=[dict(width=320, height=240, camera_id=camera)]
+        )
+
         self._ignored_keys = []
         for key, value in self._env.observation_spec().items():
             if value.shape == (0,):
@@ -104,6 +111,7 @@ class DMC:
     @property
     def obs_space(self):
         spaces = {
+            'point_cloud': gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float32),
             'image': gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
             'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
             'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
@@ -136,12 +144,14 @@ class DMC:
             if time_step.last():
                 break
         assert time_step.discount in (0, 1)
+
         obs = {
             'reward': reward,
             'is_first': False,
             'is_last': time_step.last(),
             'is_terminal': time_step.discount == 0,
             'image': self._env.physics.render(*self._size, camera_id=self._camera),
+            'point_cloud': self._pcg(self._env.physics),
         }
         obs.update({
             k: v for k, v in dict(time_step.observation).items()
@@ -156,6 +166,7 @@ class DMC:
             'is_last': False,
             'is_terminal': False,
             'image': self._env.physics.render(*self._size, camera_id=self._camera),
+            'point_cloud': self._pcg(self._env.physics),
         }
         obs.update({
             k: v for k, v in dict(time_step.observation).items()
@@ -527,6 +538,7 @@ class Async:
     _EXCEPTION = 5
 
     def __init__(self, constructor, strategy='thread'):
+        import cloudpickle
         self._pickled_ctor = cloudpickle.dumps(constructor)
         if strategy == 'process':
             import multiprocessing as mp

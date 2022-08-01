@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers as tfkl
 from tensorflow_probability import distributions as tfd
-from tensorflow.keras.mixed_precision import experimental as prec
+from tensorflow.keras import mixed_precision as prec
 
 import common
 
@@ -183,22 +183,28 @@ class EnsembleRSSM(common.Module):
 class Encoder(common.Module):
 
     def __init__(
-            self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', act='elu', norm='none',
-            cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400]):
+            self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', pn_keys=r'.*', act='elu', norm='none',
+            cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400],
+            pn_layers=[64, 128, 256, 50]
+    ):
         self.shapes = shapes
         self.cnn_keys = [
             k for k, v in shapes.items() if re.match(cnn_keys, k) and len(v) == 3]
         self.mlp_keys = [
             k for k, v in shapes.items() if re.match(mlp_keys, k) and len(v) == 1]
+        self.pn_keys = [
+            k for k, v in shapes.items() if re.match(pn_keys, k) and len(v) == 2]
         print('Encoder CNN inputs:', list(self.cnn_keys))
         print('Encoder MLP inputs:', list(self.mlp_keys))
+        print('Encoder PointNet outputs:', list(self.pn_keys))
         self._act = get_act(act)
         self._norm = norm
         self._cnn_depth = cnn_depth
         self._cnn_kernels = cnn_kernels
         self._mlp_layers = mlp_layers
+        self._pn_layers = pn_layers
 
-    @tf.function
+    # @tf.function
     def __call__(self, data):
         key, shape = list(self.shapes.items())[0]
         batch_dims = data[key].shape[:-len(shape)]
@@ -210,6 +216,8 @@ class Encoder(common.Module):
             outputs.append(self._cnn({k: data[k] for k in self.cnn_keys}))
         if self.mlp_keys:
             outputs.append(self._mlp({k: data[k] for k in self.mlp_keys}))
+        if self.pn_keys:
+            outputs.append(self._pn({k: data[k] for k in self.pn_keys}))
         output = tf.concat(outputs, -1)
         return output.reshape(batch_dims + output.shape[1:])
 
@@ -232,24 +240,41 @@ class Encoder(common.Module):
             x = self._act(x)
         return x
 
+    def _pn(self, data):
+        x = tf.concat(list(data.values()), -1)
+        x = x.astype(prec.global_policy().compute_dtype)
+        for i, width in enumerate(self._pn_layers):
+            x = self.get(f'pn_dense{i}', tfkl.Dense, width)(x)
+            x = self.get(f'pn_densenorm{i}', NormLayer, self._norm)(x)
+            x = self._act(x)
+            if i == len(self._pn_layers) - 2:
+                x = tf.reduce_max(x, axis=-2)
+        return x
+
 
 class Decoder(common.Module):
 
     def __init__(
-            self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', act='elu', norm='none',
-            cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400]):
+            self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', pn_keys=r'.*', act='elu', norm='none',
+            cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400],
+            pn_layers=[64, 128, 256, 3], pn_number=100):
         self._shapes = shapes
         self.cnn_keys = [
             k for k, v in shapes.items() if re.match(cnn_keys, k) and len(v) == 3]
         self.mlp_keys = [
             k for k, v in shapes.items() if re.match(mlp_keys, k) and len(v) == 1]
+        self.pn_keys = [
+            k for k, v in shapes.items() if re.match(pn_keys, k) and len(v) == 2]
         print('Decoder CNN outputs:', list(self.cnn_keys))
         print('Decoder MLP outputs:', list(self.mlp_keys))
+        print('Decoder PointNet outputs:', list(self.pn_keys))
         self._act = get_act(act)
         self._norm = norm
         self._cnn_depth = cnn_depth
         self._cnn_kernels = cnn_kernels
         self._mlp_layers = mlp_layers
+        self._pn_layers = pn_layers
+        self._pn_number = pn_number
 
     def __call__(self, features):
         features = tf.cast(features, prec.global_policy().compute_dtype)
@@ -258,6 +283,8 @@ class Decoder(common.Module):
             outputs.update(self._cnn(features))
         if self.mlp_keys:
             outputs.update(self._mlp(features))
+        if self.pn_keys:
+            outputs.update(self._pn(features))
         return outputs
 
     def _cnn(self, features):
@@ -290,6 +317,21 @@ class Decoder(common.Module):
         dists = {}
         for key, shape in shapes.items():
             dists[key] = self.get(f'dense_{key}', DistLayer, shape)(x)
+        return dists
+
+    def _pn(self, features):
+        shapes = {k: self._shapes[k] for k in self.pn_keys}
+        x = features
+        x = self.get(f'pn_dense0', tfkl.Dense, self._pn_number*self._pn_layers[0])(x)
+        x = x.reshape(features.shape[:-1]+[self._pn_number, self._pn_layers[0]])
+        # x = self.get(f'pn_reshape', tfkl.Reshape, features.shape[:-1] + [self._pn_number, self._pn_layers[0]])(x)
+        for i, width in enumerate(self._pn_layers[1:]):
+            x = self.get(f'pn_dense{i+1}', tfkl.Dense, width)(x)
+            x = self.get(f'pn_densenorm{i+1}', NormLayer, self._norm)(x)
+            x = self._act(x)
+        dists = {}
+        for key, shape in shapes.items():
+            dists[key] = tfd.Independent(tfd.Normal(x, 1), len(shape))
         return dists
 
 

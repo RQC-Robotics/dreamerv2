@@ -87,7 +87,7 @@ class WorldModel(common.Module):
         self.rssm = common.EnsembleRSSM(**config.rssm)
         self.encoder = common.Encoder(shapes, **config.encoder)
         self.heads = {}
-        self.heads['decoder'] = common.Decoder(shapes, **config.decoder)
+        self.heads['decoder'] = common.Decoder(shapes, **config.decoder, pn_number=config.pn_number)
         self.heads['reward'] = common.MLP([], **config.reward_head)
         if config.pred_discount:
             self.heads['discount'] = common.MLP([], **config.discount_head)
@@ -174,6 +174,8 @@ class WorldModel(common.Module):
                 value = value.astype(dtype)
             if value.dtype == tf.uint8:
                 value = value.astype(dtype) / 255.0 - 0.5
+            if key == 'point_cloud':
+                value = value.astype(dtype)
             obs[key] = value
         obs['reward'] = {
             'identity': tf.identity,
