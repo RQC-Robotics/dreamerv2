@@ -204,7 +204,7 @@ class Encoder(common.Module):
         self._mlp_layers = mlp_layers
         self._pn_layers = pn_layers
 
-    # @tf.function
+    @tf.function
     def __call__(self, data):
         key, shape = list(self.shapes.items())[0]
         batch_dims = data[key].shape[:-len(shape)]
@@ -247,8 +247,7 @@ class Encoder(common.Module):
             x = self.get(f'pn_dense{i}', tfkl.Dense, width)(x)
             x = self.get(f'pn_densenorm{i}', NormLayer, self._norm)(x)
             x = self._act(x)
-            if i == len(self._pn_layers) - 2:
-                x = tf.reduce_max(x, axis=-2)
+        x = tf.reduce_max(x, axis=-2)
         return x
 
 
@@ -324,11 +323,13 @@ class Decoder(common.Module):
         x = features
         x = self.get(f'pn_dense0', tfkl.Dense, self._pn_number*self._pn_layers[0])(x)
         x = x.reshape(features.shape[:-1]+[self._pn_number, self._pn_layers[0]])
-        # x = self.get(f'pn_reshape', tfkl.Reshape, features.shape[:-1] + [self._pn_number, self._pn_layers[0]])(x)
         for i, width in enumerate(self._pn_layers[1:]):
             x = self.get(f'pn_dense{i+1}', tfkl.Dense, width)(x)
             x = self.get(f'pn_densenorm{i+1}', NormLayer, self._norm)(x)
-            x = self._act(x)
+            # The last act domain may be incompatible with a coordinate frame.
+            #   Rescaling?
+            if i != len(self._pn_layers) - 2:
+                x = self._act(x)
         dists = {}
         for key, shape in shapes.items():
             dists[key] = tfd.Independent(tfd.Normal(x, 1), len(shape))
