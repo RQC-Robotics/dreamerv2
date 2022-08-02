@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.keras import mixed_precision as prec
+from tensorflow_graphics.nn.loss import chamfer_distance
 
 import common
 import expl
@@ -118,7 +119,10 @@ class WorldModel(common.Module):
             out = head(inp)
             dists = out if isinstance(out, dict) else {name: out}
             for key, dist in dists.items():
-                like = tf.cast(dist.log_prob(data[key]), tf.float32)
+                if key == 'point_cloud':
+                    like = - tf.cast(chamfer_distance.evaluate(data[key], dist.mean()), tf.float32)
+                else:
+                    like = tf.cast(dist.log_prob(data[key]), tf.float32)
                 likes[key] = like
                 losses[key] = -like.mean()
         model_loss = sum(

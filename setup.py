@@ -14,7 +14,7 @@ setuptools.setup(
     entry_points={'console_scripts': ['dreamerv2=dreamerv2.train:main']},
     install_requires=[
         'gym[atari]', 'atari_py', 'crafter', 'dm_control', 'ruamel.yaml',
-        'tensorflow', 'tensorflow_probability'],
+        'tensorflow', 'tensorflow_probability', 'tensorflow_graphics'],
     classifiers=[
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: MIT License',
