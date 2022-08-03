@@ -104,7 +104,6 @@ class WorldModel(common.Module):
         return state, outputs, metrics
 
     def loss(self, data, state=None):
-        import pdb; pdb.set_trace()
         data = self.preprocess(data)
         embed = self.encoder(data)
         post, prior = self.rssm.observe(
