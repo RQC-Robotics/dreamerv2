@@ -185,7 +185,7 @@ class Encoder(common.Module):
     def __init__(
             self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', pn_keys=r'.*', act='elu', norm='none',
             cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400],
-            pn_layers=[64, 128, 256, 50]
+            pn_layers=[64, 128, 128, 256]
     ):
         self.shapes = shapes
         self.cnn_keys = [
@@ -256,7 +256,7 @@ class Decoder(common.Module):
     def __init__(
             self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', pn_keys=r'.*', act='elu', norm='none',
             cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400],
-            pn_layers=[64, 128, 256, 3], pn_number=100):
+            pn_layers=[64, 128, 256], pn_number=100):
         self._shapes = shapes
         self.cnn_keys = [
             k for k, v in shapes.items() if re.match(cnn_keys, k) and len(v) == 3]
@@ -319,20 +319,19 @@ class Decoder(common.Module):
         return dists
 
     def _pn(self, features):
-        shapes = {k: self._shapes[k] for k in self.pn_keys}
+        channels = {k: self._shapes[k][-1] for k in self.pn_keys}
         x = features
         x = self.get(f'pn_dense0', tfkl.Dense, self._pn_number*self._pn_layers[0])(x)
         x = x.reshape(features.shape[:-1]+[self._pn_number, self._pn_layers[0]])
         for i, width in enumerate(self._pn_layers[1:]):
             x = self.get(f'pn_dense{i+1}', tfkl.Dense, width)(x)
             x = self.get(f'pn_densenorm{i+1}', NormLayer, self._norm)(x)
-            # The last act domain may be incompatible with a coordinate frame.
-            #   Rescaling?
-            if i != len(self._pn_layers) - 2:
-                x = self._act(x)
-        dists = {}
-        for key, shape in shapes.items():
-            dists[key] = tfd.Independent(tfd.Normal(x, 1), len(shape))
+            x = self._act(x)
+        x = self.get(f'pn_dense{len(self._pn_layers)}', tfkl.Dense, sum(channels.values()))(x)
+        means = tf.split(x, list(channels.values()), -1)
+        dists = {
+            key: tfd.Independent(tfd.Normal(mean, 1), 3)
+            for (key, shape), mean in zip(channels.items(), means)}
         return dists
 
 

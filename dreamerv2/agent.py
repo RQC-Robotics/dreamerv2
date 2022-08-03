@@ -88,7 +88,7 @@ class WorldModel(common.Module):
         self.rssm = common.EnsembleRSSM(**config.rssm)
         self.encoder = common.Encoder(shapes, **config.encoder)
         self.heads = {}
-        self.heads['decoder'] = common.Decoder(shapes, **config.decoder, pn_number=config.pn_number)
+        self.heads['decoder'] = common.Decoder(shapes, **config.decoder)
         self.heads['reward'] = common.MLP([], **config.reward_head)
         if config.pred_discount:
             self.heads['discount'] = common.MLP([], **config.discount_head)
@@ -104,6 +104,7 @@ class WorldModel(common.Module):
         return state, outputs, metrics
 
     def loss(self, data, state=None):
+        import pdb; pdb.set_trace()
         data = self.preprocess(data)
         embed = self.encoder(data)
         post, prior = self.rssm.observe(
@@ -179,6 +180,11 @@ class WorldModel(common.Module):
             if value.dtype == tf.uint8:
                 value = value.astype(dtype) / 255.0 - 0.5
             if key == 'point_cloud':
+                value = value.astype(dtype)
+            if key == 'depth_map':
+                value = tf.where(tf.math.is_nan(value),
+                                 tf.ones_like(value),
+                                 tf.math.tanh(value / 10.))
                 value = value.astype(dtype)
             obs[key] = value
         obs['reward'] = {

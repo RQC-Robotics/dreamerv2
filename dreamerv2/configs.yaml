@@ -41,8 +41,8 @@ defaults:
   grad_heads: [ decoder, reward, discount ]
   pred_discount: True
   rssm: { ensemble: 1, hidden: 1024, deter: 1024, stoch: 32, discrete: 32, act: elu, norm: none, std_act: sigmoid2, min_std: 0.1 }
-  encoder: { mlp_keys: '.*', cnn_keys: '.*', pn_keys: '.*', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [ 4, 4, 4, 4 ], mlp_layers: [ 400, 400, 400, 400 ], pn_layers: [64, 128, 256] }
-  decoder: { mlp_keys: '.*', cnn_keys: '.*', pn_keys: '.*', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [ 5, 5, 6, 6 ], mlp_layers: [ 400, 400, 400, 400 ], pn_layers: [64, 64, 3] }
+  encoder: { mlp_keys: '.*', cnn_keys: '.*', pn_keys: '.*', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [ 4, 4, 4, 4 ], mlp_layers: [ 400, 400, 400, 400 ], pn_layers: [64, 128, 128, 256] }
+  decoder: { mlp_keys: '.*', cnn_keys: '.*', pn_keys: '.*', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [ 5, 5, 6, 6 ], mlp_layers: [ 400, 400, 400, 400 ], pn_layers: [64, 64], pn_number: 100}
   reward_head: { layers: 4, units: 400, act: elu, norm: none, dist: mse }
   discount_head: { layers: 4, units: 400, act: elu, norm: none, dist: binary }
   loss_scales: { kl: 1.0, reward: 1.0, discount: 1.0, proprio: 1.0 }
@@ -82,8 +82,8 @@ defaults:
 atari:
 
   task: atari_pong
-  encoder: { mlp_keys: '$^', cnn_keys: 'image' }
-  decoder: { mlp_keys: '$^', cnn_keys: 'image' }
+  encoder: { mlp_keys: '$^', cnn_keys: 'image', pn_keys: '$^' }
+  decoder: { mlp_keys: '$^', cnn_keys: 'image', pn_keys: '$^' }
   time_limit: 27000
   action_repeat: 4
   steps: 5e7
@@ -104,8 +104,8 @@ atari:
 crafter:
 
   task: crafter_reward
-  encoder: { mlp_keys: '$^', cnn_keys: 'image' }
-  decoder: { mlp_keys: '$^', cnn_keys: 'image' }
+  encoder: { mlp_keys: '$^', cnn_keys: 'image', pn_keys: '$^' }
+  decoder: { mlp_keys: '$^', cnn_keys: 'image', pn_keys: '$^' }
   log_keys_max: '^log_achievement_.*'
   log_keys_sum: '^log_reward$'
   rssm: { hidden: 1024, deter: 1024 }
@@ -119,8 +119,8 @@ crafter:
 dmc_vision:
 
   task: dmc_walker_walk
-  encoder: { mlp_keys: '$^', cnn_keys: 'image' }
-  decoder: { mlp_keys: '$^', cnn_keys: 'image' }
+  encoder: { mlp_keys: '$^', cnn_keys: 'image', pn_keys: '$^' }
+  decoder: { mlp_keys: '$^', cnn_keys: 'image', pn_keys: '$^' }
   action_repeat: 2
   eval_every: 1e4
   prefill: 1000
@@ -139,8 +139,8 @@ dmc_vision:
 dmc_proprio:
 
   task: dmc_walker_walk
-  encoder: { mlp_keys: '.*', cnn_keys: '$^' }
-  decoder: { mlp_keys: '.*', cnn_keys: '$^' }
+  encoder: { mlp_keys: '.*', cnn_keys: '$^', pn_keys: '$^' }
+  decoder: { mlp_keys: '.*', cnn_keys: '$^', pn_keys: '$^' }
   action_repeat: 2
   eval_every: 1e4
   prefill: 1000
@@ -160,7 +160,7 @@ dmc_point_cloud:
 
   task: dmc_walker_walk
   encoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud' }
-  decoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud' }
+  decoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud', pn_number: 100 }
   action_repeat: 2
   dmc_camera: 0
   eval_every: 1e4

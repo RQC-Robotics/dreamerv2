@@ -113,6 +113,7 @@ class DMC:
         spaces = {
             'point_cloud': gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float32),
             'image': gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
+            'depth_map': gym.spaces.Box(0, np.inf, self._size+(1,), dtype=np.float32),
             'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
             'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
             'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
@@ -152,6 +153,7 @@ class DMC:
             'is_terminal': time_step.discount == 0,
             'image': self._env.physics.render(*self._size, camera_id=self._camera),
             'point_cloud': self._pcg(self._env.physics),
+            'depth_map': self._env.physics.render(*self._size, camera_id=self._camera, depth=True)[..., None],
         }
         obs.update({
             k: v for k, v in dict(time_step.observation).items()
@@ -167,6 +169,7 @@ class DMC:
             'is_terminal': False,
             'image': self._env.physics.render(*self._size, camera_id=self._camera),
             'point_cloud': self._pcg(self._env.physics),
+            'depth_map': self._env.physics.render(*self._size, camera_id=self._camera, depth=True)[..., None],
         }
         obs.update({
             k: v for k, v in dict(time_step.observation).items()
