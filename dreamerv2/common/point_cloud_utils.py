@@ -1,7 +1,5 @@
 from typing import NamedTuple, TypedDict, Union, Iterable
-
 import numpy as np
-from dm_control.mujoco.engine import Camera
 
 
 class IntrinsicParams(NamedTuple):
@@ -47,27 +45,24 @@ def point_cloud_from_depth_map(depth, intrinsic_params):
 
 
 def camera_params_from_physics(physics, render_kwargs: CameraParams):
-    """Get required params from physics"""
-    # todo: rotation + translation
-    cam = Camera(physics, **render_kwargs)
-    image, focal, rotation, translation = cam.matrices()
-    intrinsic = (image @ focal)[:, :-1]
-    extrinsic_mat = rotation @ translation
+    width, height, camera_id = map(render_kwargs.get, ('width', 'height', 'camera_id'))
+    fov = physics.named.model.cam_fovy[camera_id]
+    f = (1. / np.tan(np.deg2rad(fov) / 2)) * height / 2.0
+    cx = (width - 1) / 2.
+    cy = (height - 1) / 2.
 
     intrinsic_params = IntrinsicParams(
-        height=render_kwargs['height'],
-        width=render_kwargs['width'],
-        fx=-intrinsic[0, 0],
-        fy=intrinsic[1, 1],
-        cx=intrinsic[0, 2],
-        cy=intrinsic[1, 2]
+        height=height,
+        width=width,
+        fx=-f,
+        fy=f,
+        cx=cx,
+        cy=cy
     )
 
-    return intrinsic_params, extrinsic_mat
+    return intrinsic_params
 
 
-# TODO: global transformation
-# TODO: append rgb inputs
 class PointCloudGenerator:
     def __init__(self,
                  pn_number: int,
@@ -93,21 +88,14 @@ class PointCloudGenerator:
         """Per camera pcd generation."""
         depth = physics.render(depth=True, **render_kwargs)
 
-        intrinsic_params, extrinsic_mat = camera_params_from_physics(physics, render_kwargs)
+        intrinsic_params = camera_params_from_physics(physics, render_kwargs)
         pcd = point_cloud_from_depth_map(depth, intrinsic_params)
         mask = self._mask(physics, pcd, render_kwargs)
         pcd = pcd[mask]
 
-        # TODO: fix transformation
-        inv_rotation = physics.named.data.cam_xmat[render_kwargs['camera_id']].reshape(3, 3)
-        translation = physics.named.data.cam_xpos[render_kwargs['camera_id']]
-        # pcd = np.einsum('ij, nj -> ni', inv_rotation, pcd)
-        # pcd += translations
-        # inv_ex = np.linalg.inv(extrinsic_mat)[:-1]
-        # ones = np.ones_like(pcd[:, -1:])
-        # pcd = np.concatenate((pcd, ones), axis=-1)
-        # pcd = np.einsum('ij, nj -> ni', inv_ex, pcd)
-
+        rot = physics.named.data.cam_xmat[render_kwargs['camera_id']].reshape(3, 3)
+        pos = physics.named.data.cam_xpos[render_kwargs['camera_id']]
+        pcd = - pcd @ rot.T# + pos
         return pcd
 
     def _apply_stride(self, pcd):
