@@ -45,7 +45,7 @@ defaults:
   decoder: { mlp_keys: '.*', cnn_keys: '.*', pn_keys: '.*', act: elu, norm: none, cnn_depth: 48, cnn_kernels: [ 5, 5, 6, 6 ], mlp_layers: [ 400, 400, 400, 400 ], pn_layers: [64, 64], pn_number: 100}
   reward_head: { layers: 4, units: 400, act: elu, norm: none, dist: mse }
   discount_head: { layers: 4, units: 400, act: elu, norm: none, dist: binary }
-  loss_scales: { kl: 1.0, reward: 1.0, discount: 1.0, proprio: 1.0 }
+  loss_scales: { kl: 1.0, reward: 1.0, discount: 1.0, proprio: 1.0, point_cloud: 100.0 }
   kl: { free: 0.0, forward: False, balance: 0.8, free_avg: True }
   model_opt: { opt: adam, lr: 1e-4, eps: 1e-5, clip: 100, wd: 1e-6 }
 
@@ -159,8 +159,8 @@ dmc_proprio:
 dmc_point_cloud:
 
   task: dmc_walker_walk
-  encoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud' }
-  decoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud', pn_number: 100 }
+  encoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud', pn_layers: [64, 128, 256, 512]}
+  decoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud', pn_layers: [256, 4, 4], pn_number: 100 }
   action_repeat: 2
   dmc_camera: 0
   eval_every: 1e4

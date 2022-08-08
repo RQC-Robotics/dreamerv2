@@ -321,13 +321,15 @@ class Decoder(common.Module):
     def _pn(self, features):
         channels = {k: self._shapes[k][-1] for k in self.pn_keys}
         x = features
-        x = self.get(f'pn_dense0', tfkl.Dense, self._pn_number*self._pn_layers[0])(x)
-        x = x.reshape(features.shape[:-1]+[self._pn_number, self._pn_layers[0]])
-        for i, width in enumerate(self._pn_layers[1:]):
-            x = self.get(f'pn_dense{i+1}', tfkl.Dense, width)(x)
-            x = self.get(f'pn_densenorm{i+1}', NormLayer, self._norm)(x)
+        for i, width in enumerate(self._pn_layers):
+            width = width if i == 0 else width * self._pn_number
+            x = self.get(f'pn_dense{i}', tfkl.Dense, width)(x)
+            x = self.get(f'pn_densenorm{i}', NormLayer, self._norm)(x)
             x = self._act(x)
-        x = self.get(f'pn_dense{len(self._pn_layers)}', tfkl.Dense, sum(channels.values()))(x)
+
+        total_channels = sum(channels.values())
+        x = self.get(f'pn_dense{len(self._pn_layers)}', tfkl.Dense, self._pn_number*total_channels)(x)
+        x = x.reshape(list(features.shape[:-1])+[self._pn_number, total_channels])
         means = tf.split(x, list(channels.values()), -1)
         dists = {
             key: tfd.Independent(tfd.Normal(mean, 1), 3)
