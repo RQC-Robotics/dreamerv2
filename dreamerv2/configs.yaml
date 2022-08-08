@@ -27,7 +27,7 @@ defaults:
   log_keys_sum: '^$'
   log_keys_mean: '^$'
   log_keys_max: '^$'
-  precision: 16
+  precision: 32
   jit: True
 
   # Agent
@@ -160,9 +160,8 @@ dmc_point_cloud:
 
   task: dmc_walker_walk
   encoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud', pn_layers: [64, 128, 256, 512]}
-  decoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud', pn_layers: [256, 4, 4], pn_number: 100 }
+  decoder: { mlp_keys: '$^', cnn_keys: '$^', pn_keys: 'point_cloud', pn_layers: [64, 4, 4], pn_number: 100 }
   action_repeat: 2
-  dmc_camera: 0
   eval_every: 1e4
   prefill: 1000
   pretrain: 100

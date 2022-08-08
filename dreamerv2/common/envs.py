@@ -99,7 +99,7 @@ class DMC:
         self._pn_number = pn_number
         self._pcg = PointCloudGenerator(
             pn_number=pn_number,
-            cameras_params=[dict(width=320, height=240, camera_id=camera)]
+            cameras_params=[dict(width=320, height=240, camera_id=self._camera)]
         )
 
         self._ignored_keys = []
@@ -153,7 +153,8 @@ class DMC:
             'is_terminal': time_step.discount == 0,
             'image': self._env.physics.render(*self._size, camera_id=self._camera),
             'point_cloud': self._pcg(self._env.physics),
-            'depth_map': self._env.physics.render(*self._size, camera_id=self._camera, depth=True)[..., None],
+            'depth_map': self._env.physics.render(*self._size,
+                                                  camera_id=self._camera, depth=True)[..., None],
         }
         obs.update({
             k: v for k, v in dict(time_step.observation).items()
