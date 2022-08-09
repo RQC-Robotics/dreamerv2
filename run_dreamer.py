@@ -22,8 +22,9 @@ def parse_args():
 
 
 def run_job(logdir, observation, task):
-    stderr = open('logdir/stderr.txt', 'w')
-    stdout = open('logdir/stdout.txt', 'w')
+    os.makedirs(logdir, exist_ok=False)
+    stderr = open(f'{logdir}/stderr.txt', 'w')
+    stdout = open(f'{logdir}/stdout.txt', 'w')
     command = (
         f'python dreamerv2/train.py',
         f'--logdir {logdir}',
