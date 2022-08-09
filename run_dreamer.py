@@ -22,7 +22,8 @@ def parse_args():
 
 
 def run_job(logdir, observation, task):
-    os.makedirs(logdir, exist_ok=False)
+    if not os.path.exists(logdir):
+        os.makedirs(logdir)
     stderr = open(f'{logdir}/stderr.txt', 'w')
     stdout = open(f'{logdir}/stdout.txt', 'w')
     command = (

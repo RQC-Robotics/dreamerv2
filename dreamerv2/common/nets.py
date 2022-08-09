@@ -185,7 +185,7 @@ class Encoder(common.Module):
     def __init__(
             self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', pn_keys=r'.*', act='elu', norm='none',
             cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400],
-            pn_layers=[64, 128, 128, 256]
+            pn_layers=[64, 128, 256]
     ):
         self.shapes = shapes
         self.cnn_keys = [
@@ -256,7 +256,7 @@ class Decoder(common.Module):
     def __init__(
             self, shapes, cnn_keys=r'.*', mlp_keys=r'.*', pn_keys=r'.*', act='elu', norm='none',
             cnn_depth=48, cnn_kernels=(4, 4, 4, 4), mlp_layers=[400, 400, 400, 400],
-            pn_layers=[64, 128, 256], pn_number=100):
+            pn_layers=[3], pn_number=100):
         self._shapes = shapes
         self.cnn_keys = [
             k for k, v in shapes.items() if re.match(cnn_keys, k) and len(v) == 3]
@@ -322,8 +322,7 @@ class Decoder(common.Module):
         channels = {k: self._shapes[k][-1] for k in self.pn_keys}
         x = features
         for i, width in enumerate(self._pn_layers):
-            width = width if i == 0 else width * self._pn_number
-            x = self.get(f'pn_dense{i}', tfkl.Dense, width)(x)
+            x = self.get(f'pn_dense{i}', tfkl.Dense, width * self._pn_number)(x)
             x = self.get(f'pn_densenorm{i}', NormLayer, self._norm)(x)
             x = self._act(x)
 
