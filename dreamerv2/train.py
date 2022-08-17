@@ -92,6 +92,14 @@ def main():
             reward = bool(['noreward', 'reward'].index(task)) or mode == 'eval'
             env = common.Crafter(outdir, reward)
             env = common.OneHotAction(env)
+        elif suite == 'rlbench':
+            env = common.RLBenchEnv(
+                task,
+                action_repeat=config.action_repeat,
+                size=config.render_size,
+                pn_number=config.pn_number
+            )
+            env = common.NormalizeAction(env)
         else:
             raise NotImplementedError(suite)
         env = common.TimeLimit(env, config.time_limit)
@@ -121,8 +129,13 @@ def main():
     print('Create envs.')
     num_eval_envs = min(config.envs, config.eval_eps)
     if config.envs_parallel == 'none':
-        train_envs = [make_env('train') for _ in range(config.envs)]
-        eval_envs = [make_env('eval') for _ in range(num_eval_envs)]
+        if config.task.startswith('rlbench'):
+            assert config.envs == 1
+            train_envs = [make_env('train')]
+            eval_envs = train_envs
+        else:
+            train_envs = [make_env('train') for _ in range(config.envs)]
+            eval_envs = [make_env('eval') for _ in range(num_eval_envs)]
     else:
         make_async_env = lambda mode: common.Async(
             functools.partial(make_env, mode), config.envs_parallel)
