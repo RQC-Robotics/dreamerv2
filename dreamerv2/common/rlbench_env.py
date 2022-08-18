@@ -4,13 +4,14 @@ import gym
 import rlbench
 import rlbench.backend
 from rlbench import Environment
-from rlbench.action_modes.action_mode import JointPositionActionMode, MoveArmThenGripper
-from rlbench.action_modes.gripper_action_modes import Discrete
-from rlbench.action_modes.arm_action_modes import JointVelocity
+from rlbench.action_modes.action_mode import JointPositionActionMode
 from rlbench.observation_config import CameraConfig, ObservationConfig
+from rlbench import const
 
 _TESTED_TASKS = ()
 _DISABLED_CAMERA = CameraConfig(rgb=False, depth=False, point_cloud=False, mask=False)
+_ROBOT = 'ur5'
+_UR5_ACTION_DIM = const.SUPPORTED_ROBOTS[_ROBOT][2]
 
 
 # TODO: Decide how to create action_mode:
@@ -20,6 +21,18 @@ def _make_action_mode(*args, **kwargs):
     action_mode = JointPositionActionMode()
     assert hasattr(action_mode, 'action_bounds'), '.action_bounds method is not implemented'
     return action_mode
+
+
+class VariableActionMode(JointPositionActionMode):
+    def __init__(self, robot_action_dim):
+        super().__init__()
+        self._robot_act_dim = robot_action_dim
+
+    def action_bounds(self):
+        return (
+            np.array(self._robot_act_dim * [-0.1] + [0.0]),
+            np.array(self._robot_act_dim * [0.1] + [0.04])
+        )
 
 
 def _make_observation_config(image_size):
@@ -45,24 +58,23 @@ def _make_observation_config(image_size):
 
 
 def _rescale_action(action, lower_bound, upper_bound):
-    """If default action bounds differs from [-1, 1]^n this will rescale it accordinally."""
-    return (upper_bound + lower_bound) / 2 + (upper_bound - lower_bound) / 2 * action
+    """If default action bounds differ from [-1, 1]^n this rescales it accordingly."""
+    return (upper_bound + lower_bound) / 2. + (upper_bound - lower_bound) / 2. * action
 
 
-# todo resize wrapper
+# todo: deal with sparse rewards: now dense only available for reach_target
 class RLBenchEnv:
     def __init__(self, name: str, size: tuple = (64, 64), action_repeat: int = 1,
                  pn_number: int = 100):
-        action_mode = _make_action_mode()
+        action_mode = VariableActionMode(_UR5_ACTION_DIM)
         obs_config = _make_observation_config(size)
         task = rlbench.utils.name_to_task_class(name)
-
         self._lower_action_bound, self._upper_action_bound = action_mode.action_bounds()
         self._env = Environment(
             action_mode,
             obs_config=obs_config,
             headless=True,
-            robot_setup='panda'
+            robot_setup=_ROBOT
         )
         self._task = self._env.get_task(task)
 
@@ -104,12 +116,12 @@ class RLBenchEnv:
 
     @property
     def act_space(self):
-        action = gym.spaces.Box(-1, 1, self._env.action_shape, dtype=np.float32)
+        action = gym.spaces.Box(-1, 1, (_UR5_ACTION_DIM + 1,), dtype=np.float32)
         return {'action': action}
 
     @property
     def obs_space(self):
-        pos_shape = (self._env.action_shape[0] - 1,)
+        pos_shape = self._env.action_shape
         return {
             'image': gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
             'depth': gym.spaces.Box(0, np.inf, self._size, dtype=np.float32),
@@ -131,7 +143,7 @@ class RLBenchEnv:
             'depth': obs.front_depth,
             'image': obs.front_rgb,
             'flat_point_cloud': obs.front_point_cloud,
-            'point_coud': self._get_pc(obs.front_point_cloud),
+            'point_cloud': self._get_pc(obs.front_point_cloud),
             'positions': obs.joint_positions,
             'velocities': obs.joint_velocities,
             'gripper_open': obs.gripper_open,
