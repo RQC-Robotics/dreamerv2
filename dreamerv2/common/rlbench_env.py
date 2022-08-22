@@ -74,7 +74,8 @@ class RLBenchEnv:
             action_mode,
             obs_config=obs_config,
             headless=True,
-            robot_setup=_ROBOT
+            robot_setup=_ROBOT,
+            shaped_rewards=(name == "reach_target")
         )
         self._task = self._env.get_task(task)
 
