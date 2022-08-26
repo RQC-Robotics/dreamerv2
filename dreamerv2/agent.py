@@ -58,7 +58,6 @@ class Agent(common.Module):
     @tf.function
     def train(self, data, state=None):
         metrics = {}
-        metrics.update(imagination=self.wm.video_pred(data, 'image'))
         state, outputs, mets = self.wm.train(data, state)
         metrics.update(mets)
         start = outputs['post']

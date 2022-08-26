@@ -105,6 +105,7 @@ class TensorBoardOutput:
         self._fps = fps
 
     def __call__(self, summaries):
+        import pdb; pdb.set_trace()
         import tensorflow as tf
         self._ensure_writer()
         self._writer.set_as_default()
