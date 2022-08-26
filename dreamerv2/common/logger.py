@@ -138,6 +138,13 @@ class TensorBoardOutput:
             image.encoded_image_string = encode_gif(video, self._fps)
             summary.value.add(tag=name, image=image)
             tf.summary.experimental.write_raw_pb(summary.SerializeToString(), step)
+
+            from PIL import Image
+
+            imgs = [Image.fromarray(img) for img in video]
+            imgs[0].save(f'{self._logdir}/{name}.gif', save_all=True,
+                         append_images=imgs[1:], optimize=False, duration=len(imgs) / 24)
+
         except (IOError, OSError) as e:
             print('GIF summaries require ffmpeg in $PATH.', e)
             tf.summary.image(name, video, step)
