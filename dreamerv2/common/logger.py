@@ -132,18 +132,18 @@ class TensorBoardOutput:
         if np.issubdtype(video.dtype, np.floating):
             video = np.clip(255 * video, 0, 255).astype(np.uint8)
         try:
+            from PIL import Image
+
+            imgs = [Image.fromarray(img) for img in video]
+            imgs[0].save(f'{self._logdir}/{name}.gif', save_all=True,
+                         append_images=imgs[1:], optimize=False, duration=len(imgs) / 12)
+
             T, H, W, C = video.shape
             summary = tf1.Summary()
             image = tf1.Summary.Image(height=H, width=W, colorspace=C)
             image.encoded_image_string = encode_gif(video, self._fps)
             summary.value.add(tag=name, image=image)
             tf.summary.experimental.write_raw_pb(summary.SerializeToString(), step)
-
-            from PIL import Image
-
-            imgs = [Image.fromarray(img) for img in video]
-            imgs[0].save(f'{self._logdir}/{name}.gif', save_all=True,
-                         append_images=imgs[1:], optimize=False, duration=len(imgs) / 24)
 
         except (IOError, OSError) as e:
             print('GIF summaries require ffmpeg in $PATH.', e)

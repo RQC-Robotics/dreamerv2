@@ -212,6 +212,28 @@ def main():
     #     except Exception:
     #         pass
 
+    def plot():
+        import json
+        import matplotlib.pyplot as plt
+
+        steps, values = [], []
+        for line in open(f'{logdir}/metrics.jsonl'):
+            line = json.loads(line)
+            if 'eval_return' in line.keys():
+                steps.append(line['step'])
+                values.append(line['eval_return'])
+
+        plt.figure(figsize=(10, 8))
+        plt.title(config.task)
+        plt.ticklabel_format(axis='x', style='scientific', scilimits=(0, 0))
+        plt.plot(steps, values)
+        plt.ylabel('eval_return')
+        plt.xlabel('environment_steps')
+        plt.savefig(f'{logdir}/eval_return.pdf', format='pdf', dpi=400)
+
+
+    plot()
+
 
 if __name__ == '__main__':
     main()
