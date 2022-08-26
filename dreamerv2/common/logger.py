@@ -136,7 +136,7 @@ class TensorBoardOutput:
 
             imgs = [Image.fromarray(img) for img in video]
             imgs[0].save(f'{self._logdir}/{name}.gif', save_all=True,
-                         append_images=imgs[1:], optimize=False, duration=len(imgs) / 12)
+                         append_images=imgs[1:], optimize=False, duration=len(imgs) / 10)
 
             T, H, W, C = video.shape
             summary = tf1.Summary()

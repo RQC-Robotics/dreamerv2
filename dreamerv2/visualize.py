@@ -153,13 +153,13 @@ def main():
     eval_driver.on_episode(eval_replay.add_episode)
 
     prefill = max(0, config.prefill - train_replay.stats['total_steps'])
-    if prefill:
-        print(f'Prefill dataset ({prefill} steps).')
-        random_agent = common.RandomAgent(act_space)
-        train_driver(random_agent, steps=prefill, episodes=1)
-        eval_driver(random_agent, episodes=1)
-        train_driver.reset()
-        eval_driver.reset()
+    # if prefill:
+    #     print(f'Prefill dataset ({prefill} steps).')
+    #     random_agent = common.RandomAgent(act_space)
+    #     train_driver(random_agent, steps=prefill, episodes=1)
+    #     eval_driver(random_agent, episodes=1)
+    #     train_driver.reset()
+    #     eval_driver.reset()
 
     print('Create agent.')
     train_dataset = iter(train_replay.dataset(**config.dataset))
@@ -216,12 +216,15 @@ def main():
         import json
         import matplotlib.pyplot as plt
 
+        step = -1
         steps, values = [], []
         for line in open(f'{logdir}/metrics.jsonl'):
             line = json.loads(line)
             if 'eval_return' in line.keys():
-                steps.append(line['step'])
-                values.append(line['eval_return'])
+                if step < line['step']:
+                    step = line['step']
+                    steps.append(line['step'])
+                    values.append(line['eval_return'])
 
         plt.figure(figsize=(10, 8))
         plt.title(config.task)
