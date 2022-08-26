@@ -152,22 +152,22 @@ def main():
     eval_driver.on_episode(lambda ep: per_episode(ep, mode='eval'))
     eval_driver.on_episode(eval_replay.add_episode)
 
-    # prefill = max(0, config.prefill - train_replay.stats['total_steps'])
-    # if prefill:
-    #     print(f'Prefill dataset ({prefill} steps).')
-    #     random_agent = common.RandomAgent(act_space)
-    #     train_driver(random_agent, steps=prefill, episodes=1)
-    # #     eval_driver(random_agent, episodes=1)
-    #     train_driver.reset()
-    # #     eval_driver.reset()
+    prefill = max(0, config.prefill - train_replay.stats['total_steps'])
+    if prefill:
+        print(f'Prefill dataset ({prefill} steps).')
+        random_agent = common.RandomAgent(act_space)
+        train_driver(random_agent, steps=prefill, episodes=1)
+    #     eval_driver(random_agent, episodes=1)
+        train_driver.reset()
+    #     eval_driver.reset()
 
     print('Create agent.')
-    # train_dataset = iter(train_replay.dataset(**config.dataset))
-    # report_dataset = iter(train_replay.dataset(**config.dataset))
+    train_dataset = iter(train_replay.dataset(**config.dataset))
+    report_dataset = iter(train_replay.dataset(**config.dataset))
     eval_dataset = iter(eval_replay.dataset(**config.dataset))
     agnt = agent.Agent(config, obs_space, act_space, step)
-    # train_agent = common.CarryOverState(agnt.train)
-    # train_agent(next(train_dataset))
+    train_agent = common.CarryOverState(agnt.train)
+    train_agent(next(train_dataset))
     if (logdir / 'variables.pkl').exists():
         print('Preload agent.')
         agnt.load(logdir / 'variables.pkl')
@@ -197,8 +197,9 @@ def main():
         logger.write()
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
-        video = agnt.wm.video_pred(next(eval_dataset)).numpy()
-        video = video['openl_image']
+        video = agnt.wm.video_pred(next(eval_dataset))
+        print(video.keys())
+        video = video['openl_image'].numpy()
 
         from PIL import Image
 
