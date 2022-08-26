@@ -169,6 +169,7 @@ def main():
     train_agent = common.CarryOverState(agnt.train)
     train_agent(next(train_dataset))
     if (logdir / 'variables.pkl').exists():
+        print('Preload agent.')
         agnt.load(logdir / 'variables.pkl')
     else:
         print('Pretrain agent.')

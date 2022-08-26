@@ -10,8 +10,8 @@ from rlbench import const
 
 _TESTED_TASKS = ()
 _DISABLED_CAMERA = CameraConfig(rgb=False, depth=False, point_cloud=False, mask=False)
-_ROBOT = 'ur5'
-_UR5_ACTION_DIM = const.SUPPORTED_ROBOTS[_ROBOT][2]
+_ROBOT = "panda"
+_ROBOT_ACTION_DIM = const.SUPPORTED_ROBOTS[_ROBOT][2]
 
 
 # TODO: Decide how to create action_mode:
@@ -19,7 +19,7 @@ _UR5_ACTION_DIM = const.SUPPORTED_ROBOTS[_ROBOT][2]
 #  discrete/cont gripper action.
 def _make_action_mode(*args, **kwargs):
     action_mode = JointPositionActionMode()
-    assert hasattr(action_mode, 'action_bounds'), '.action_bounds method is not implemented'
+    assert hasattr(action_mode, "action_bounds"), ".action_bounds method is not implemented"
     return action_mode
 
 
@@ -66,7 +66,7 @@ def _rescale_action(action, lower_bound, upper_bound):
 class RLBenchEnv:
     def __init__(self, name: str, size: tuple = (64, 64), action_repeat: int = 1,
                  pn_number: int = 100):
-        action_mode = VariableActionMode(_UR5_ACTION_DIM)
+        action_mode = VariableActionMode(_ROBOT_ACTION_DIM)
         obs_config = _make_observation_config(size)
         task = rlbench.utils.name_to_task_class(name)
         self._lower_action_bound, self._upper_action_bound = action_mode.action_bounds()
@@ -95,7 +95,7 @@ class RLBenchEnv:
         return obs
 
     def step(self, action):
-        action = action['action']
+        action = action["action"]
         assert np.isfinite(action).all(), action
         rescaled_action = _rescale_action(action, self._lower_action_bound,
                                           self._upper_action_bound)
@@ -117,38 +117,38 @@ class RLBenchEnv:
 
     @property
     def act_space(self):
-        action = gym.spaces.Box(-1, 1, (_UR5_ACTION_DIM + 1,), dtype=np.float32)
-        return {'action': action}
+        action = gym.spaces.Box(-1, 1, (_ROBOT_ACTION_DIM + 1,), dtype=np.float32)
+        return {"action": action}
 
     @property
     def obs_space(self):
         pos_shape = self._env.action_shape
         return {
-            'image': gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
-            'depth': gym.spaces.Box(0, np.inf, self._size, dtype=np.float32),
-            'flat_point_cloud': gym.spaces.Box(-np.inf, np.inf, self._size + (3,),
+            "image": gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
+            "depth": gym.spaces.Box(0, np.inf, self._size, dtype=np.float32),
+            "flat_point_cloud": gym.spaces.Box(-np.inf, np.inf, self._size + (3,),
                                                dtype=np.float64),
-            'point_cloud': gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float64),
-            'positions': gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
-            'velocities': gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
-            'gripper_open': gym.spaces.Box(0, 1, (), dtype=float),
-            'gripper_pose': gym.spaces.Box(-np.inf, np.inf, (7,), dtype=np.float64),
-            'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
-            'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'if_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
+            "point_cloud": gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float64),
+            "positions": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
+            "velocities": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
+            "gripper_open": gym.spaces.Box(0, 1, (), dtype=float),
+            "gripper_pose": gym.spaces.Box(-np.inf, np.inf, (7,), dtype=np.float64),
+            "reward": gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
+            "is_first": gym.spaces.Box(0, 1, (), dtype=np.bool),
+            "if_last": gym.spaces.Box(0, 1, (), dtype=np.bool),
+            "is_terminal": gym.spaces.Box(0, 1, (), dtype=np.bool),
         }
 
     def _observation(self, obs: rlbench.backend.observation.Observation):
         return {
-            'depth': obs.front_depth,
-            'image': obs.front_rgb,
-            'flat_point_cloud': obs.front_point_cloud,
-            'point_cloud': self._get_pc(obs.front_point_cloud),
-            'positions': obs.joint_positions,
-            'velocities': obs.joint_velocities,
-            'gripper_open': obs.gripper_open,
-            'gripper_pose': obs.gripper_pose
+            "depth": obs.front_depth,
+            "image": obs.front_rgb,
+            "flat_point_cloud": obs.front_point_cloud,
+            "point_cloud": self._get_pc(obs.front_point_cloud),
+            "positions": obs.joint_positions,
+            "velocities": obs.joint_velocities,
+            "gripper_open": obs.gripper_open,
+            "gripper_pose": obs.gripper_pose
         }
 
     def _get_pc(self, flat_pc):
