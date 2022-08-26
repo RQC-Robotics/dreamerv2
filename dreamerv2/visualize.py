@@ -197,6 +197,13 @@ def main():
         logger.write()
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
+        video = agnt.wm.video_pred(next(eval_dataset))
+
+        from PIL import Image
+
+        imgs = [Image.fromarray(img) for img in video]
+        imgs[0].save(f'{logdir}/imagination.gif', save_all=True,
+                     append_images=imgs[1:], optimize=False, duration=len(imgs) / 10)
         break
     #     if config.task.startswith('rlbench'):
     #         eval_driver.reset()
