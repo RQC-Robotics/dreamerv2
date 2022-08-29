@@ -163,8 +163,6 @@ def main():
 
     print('Create agent.')
     train_dataset = iter(train_replay.dataset(**config.dataset))
-    report_dataset = iter(train_replay.dataset(**config.dataset))
-    eval_dataset = iter(eval_replay.dataset(**config.dataset))
     agnt = agent.Agent(config, obs_space, act_space, step)
     train_agent = common.CarryOverState(agnt.train)
     train_agent(next(train_dataset))
@@ -172,12 +170,17 @@ def main():
         print('Preload agent.')
         agnt.load(logdir / 'variables.pkl')
     else:
+        raise NotImplementedError
         print('Pretrain agent.')
         for _ in range(config.pretrain):
             train_agent(next(train_dataset))
     train_policy = lambda *args: agnt.policy(
         *args, mode='explore' if should_expl(step) else 'train')
     eval_policy = lambda *args: agnt.policy(*args, mode='eval')
+
+    report_dataset = iter(train_replay.dataset(**config.dataset))
+    eval_dataset = iter(eval_replay.dataset(**config.dataset))
+    eval_dataset(eval_policy, episode=1)
 
     def train_step(tran, worker):
         if should_train(step):
@@ -204,8 +207,10 @@ def main():
         from PIL import Image
 
         imgs = [Image.fromarray(img) for img in video]
+        if video.shape[1] == 64:
+            imgs = [img.resize(128, 128) for img in imgs]
         imgs[0].save(f'{logdir}/imagination.gif', save_all=True,
-                     append_images=imgs[1:], optimize=False, duration=len(imgs) / 10)
+                     append_images=imgs[1:], optimize=False, duration=len(imgs))
         break
     #     if config.task.startswith('rlbench'):
     #         eval_driver.reset()
@@ -238,6 +243,7 @@ def main():
         plt.figure(figsize=(10, 8))
         plt.title(config.task)
         plt.ticklabel_format(axis='x', style='scientific', scilimits=(0, 0))
+        plt.ylim(ymin=0, ymax=1000)
         plt.plot(steps, values)
         plt.ylabel('eval_return')
         plt.xlabel('environment_steps')
