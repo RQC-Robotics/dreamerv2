@@ -180,7 +180,7 @@ def main():
 
     report_dataset = iter(train_replay.dataset(**config.dataset))
     eval_dataset = iter(eval_replay.dataset(**config.dataset))
-    eval_dataset(eval_policy, episode=1)
+    eval_driver(eval_policy, episode=1)
 
     def train_step(tran, worker):
         if should_train(step):
@@ -208,7 +208,7 @@ def main():
 
         imgs = [Image.fromarray(img) for img in video]
         if video.shape[1] == 64:
-            imgs = [img.resize(128, 128) for img in imgs]
+            imgs = [img.resize((128, 128)) for img in imgs]
         imgs[0].save(f'{logdir}/imagination.gif', save_all=True,
                      append_images=imgs[1:], optimize=False, duration=len(imgs))
         break

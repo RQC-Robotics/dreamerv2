@@ -136,7 +136,7 @@ class TensorBoardOutput:
 
             imgs = [Image.fromarray(img) for img in video]
             if video.shape[1] == 64:
-                imgs = [img.resize(128, 128) for img in imgs]
+                imgs = [img.resize((128, 128)) for img in imgs]
             imgs[0].save(f'{self._logdir}/{name}.gif', save_all=True,
                          append_images=imgs[1:], optimize=False, duration=len(imgs) / 10)
 
