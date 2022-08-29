@@ -180,7 +180,7 @@ def main():
 
     report_dataset = iter(train_replay.dataset(**config.dataset))
     eval_dataset = iter(eval_replay.dataset(**config.dataset))
-    eval_driver(eval_policy, episode=1)
+    eval_driver(eval_policy, episodes=1)
 
     def train_step(tran, worker):
         if should_train(step):
