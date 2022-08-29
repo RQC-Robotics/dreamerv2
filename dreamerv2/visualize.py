@@ -201,8 +201,8 @@ def main():
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
         video = agnt.wm.video_pred(next(eval_dataset))
-        print(video.keys())
         video = video['openl_image'].numpy()
+        video = np.clip(255 * video, 0, 255).astype(np.uint8)
 
         from PIL import Image
 
