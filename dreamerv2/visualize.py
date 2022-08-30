@@ -206,6 +206,7 @@ def main():
         data = agnt.wm.preprocess(data)
         video = agnt.wm.video_pred(data, 'image')
         video = video['openl_image'].numpy()
+        video = video[0]
         video = np.clip(255 * video, 0, 255).astype(np.uint8)
 
         from PIL import Image
