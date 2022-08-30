@@ -200,7 +200,7 @@ def main():
         logger.write()
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
-        video = agnt.wm.video_pred(next(eval_dataset))
+        video = agnt.wm.video_pred(next(eval_dataset), 'image')
         video = video['openl_image'].numpy()
         video = np.clip(255 * video, 0, 255).astype(np.uint8)
 
