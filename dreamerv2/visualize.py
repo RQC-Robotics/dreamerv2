@@ -180,7 +180,6 @@ def main():
 
     report_dataset = iter(train_replay.dataset(**config.dataset))
     eval_dataset = iter(eval_replay.dataset(**config.dataset))
-    eval_driver(eval_policy, episodes=1)
 
     def train_step(tran, worker):
         if should_train(step):
@@ -195,12 +194,17 @@ def main():
             logger.write(fps=True)
 
     train_driver.on_step(train_step)
+    eval_driver.reset()
+    eval_driver(eval_policy, episodes=1)
 
     while step < config.steps:
         logger.write()
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
-        video = agnt.wm.video_pred(next(eval_dataset), 'image')
+        import pdb; pdb.set_trace()
+        data = next(eval_dataset)
+        data = agnt.wm.preprocess(data)
+        video = agnt.wm.video_pred(data, 'image')
         video = video['openl_image'].numpy()
         video = np.clip(255 * video, 0, 255).astype(np.uint8)
 
