@@ -4,7 +4,9 @@ import gym
 import rlbench
 import rlbench.backend
 from rlbench import Environment
-from rlbench.action_modes.action_mode import JointPositionActionMode
+from rlbench.action_modes.action_mode import JointPositionActionMode, MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import EndEffectorPoseViaPlanning, EndEffectorPoseViaIK
+from rlbench.action_modes.gripper_action_modes import Discrete
 from rlbench.observation_config import CameraConfig, ObservationConfig
 from rlbench import const
 
@@ -12,15 +14,6 @@ _TESTED_TASKS = ()
 _DISABLED_CAMERA = CameraConfig(rgb=False, depth=False, point_cloud=False, mask=False)
 _ROBOT = "panda"
 _ROBOT_ACTION_DIM = const.SUPPORTED_ROBOTS[_ROBOT][2]
-
-
-# TODO: Decide how to create action_mode:
-#  this includes choices of to use or not IK/planning, absolute/relative control step,
-#  discrete/cont gripper action.
-def _make_action_mode(*args, **kwargs):
-    action_mode = JointPositionActionMode()
-    assert hasattr(action_mode, "action_bounds"), ".action_bounds method is not implemented"
-    return action_mode
 
 
 class VariableActionMode(JointPositionActionMode):
@@ -32,6 +25,29 @@ class VariableActionMode(JointPositionActionMode):
         return (
             np.array(self._robot_act_dim * [-0.1] + [0.0]),
             np.array(self._robot_act_dim * [0.1] + [0.04])
+        )
+
+
+class PoseActionMode(MoveArmThenGripper):
+
+    def __init__(self):
+        super().__init__(EndEffectorPoseViaPlanning(absolute_mode=False), Discrete())
+        # super().__init__(EndEffectorPoseViaIK(), Discrete())
+
+    def action(self, scene, action):
+        import pdb; pdb.set_trace()
+        pos, rot, grip = np.split(action, [3, 7], axis=-1)
+        rot /= np.linalg.norm(rot, axis=-1)
+        action = np.concatenate([pos, rot, grip], axis=-1)
+        super().action(scene, action)
+
+    @property
+    def act_space(self):
+        return gym.spaces.Box(
+            low=np.array(3 * [-1.] + 4*[-1.] + [0.], dtype=np.float32),
+            high=np.array(3 * [1.]+4*[1.] + [1.], dtype=np.float32),
+            dtype=np.float32,
+            shape=(8,)
         )
 
 
@@ -66,10 +82,14 @@ def _rescale_action(action, lower_bound, upper_bound):
 class RLBenchEnv:
     def __init__(self, name: str, size: tuple = (64, 64), action_repeat: int = 1,
                  pn_number: int = 100):
-        action_mode = VariableActionMode(_ROBOT_ACTION_DIM)
+        # action_mode = VariableActionMode(_ROBOT_ACTION_DIM)
+        action_mode = PoseActionMode()
+        self._action_mode = action_mode
+
         obs_config = _make_observation_config(size)
         task = rlbench.utils.name_to_task_class(name)
-        self._lower_action_bound, self._upper_action_bound = action_mode.action_bounds()
+        self._lower_action_bound = action_mode.act_space.high
+        self._upper_action_bound = action_mode.act_space.low
         self._env = Environment(
             action_mode,
             obs_config=obs_config,
@@ -77,6 +97,7 @@ class RLBenchEnv:
             robot_setup=_ROBOT,
             shaped_rewards=(name == "reach_target")
         )
+        self._env.launch()
         self._task = self._env.get_task(task)
 
         self._action_repeat = action_repeat
@@ -117,8 +138,8 @@ class RLBenchEnv:
 
     @property
     def act_space(self):
-        action = gym.spaces.Box(-1, 1, (_ROBOT_ACTION_DIM + 1,), dtype=np.float32)
-        return {"action": action}
+        # action = gym.spaces.Box(-1, 1, (_ROBOT_ACTION_DIM + 1,), dtype=np.float32)
+        return {"action": self._action_mode.act_space}
 
     @property
     def obs_space(self):
