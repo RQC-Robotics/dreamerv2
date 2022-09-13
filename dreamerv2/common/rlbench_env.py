@@ -1,19 +1,23 @@
 """RLBench (github.com/stepjam/RLBench) environment wrapper."""
+from typing import Optional, Sequence
+
 import numpy as np
 import gym
+
 import rlbench
+import rlbench.utils
 import rlbench.backend
 from rlbench import Environment
 from rlbench.action_modes.action_mode import JointPositionActionMode, MoveArmThenGripper
-from rlbench.action_modes.arm_action_modes import EndEffectorPoseViaPlanning, EndEffectorPoseViaIK
+from rlbench.action_modes.arm_action_modes import EndEffectorPoseViaPlanning
 from rlbench.action_modes.gripper_action_modes import Discrete
 from rlbench.observation_config import CameraConfig, ObservationConfig
-from rlbench import const
+from rlbench.const import SUPPORTED_ROBOTS
 
 _TESTED_TASKS = ()
 _DISABLED_CAMERA = CameraConfig(rgb=False, depth=False, point_cloud=False, mask=False)
 _ROBOT = "panda"
-_ROBOT_ACTION_DIM = const.SUPPORTED_ROBOTS[_ROBOT][2]
+_ROBOT_ACTION_DIM = SUPPORTED_ROBOTS[_ROBOT][2]
 
 
 class VariableActionMode(JointPositionActionMode):
@@ -28,32 +32,54 @@ class VariableActionMode(JointPositionActionMode):
         )
 
 
-class PoseActionMode(MoveArmThenGripper):
+class ActionRescale:
+    def __init__(self, lower_bound: np.ndarray, upper_bound: np.ndarray):
+        lower_bound, upper_bound = map(
+            lambda bound: np.asanyarray(bound, dtype=np.float32),
+            (lower_bound, upper_bound)
+        )
+        self._slope = (upper_bound - lower_bound) / 2.
+        self._inception = (upper_bound + lower_bound) / 2.
 
-    def __init__(self):
-        super().__init__(EndEffectorPoseViaPlanning(absolute_mode=False), Discrete())
-        # super().__init__(EndEffectorPoseViaIK(), Discrete())
+    def __call__(self, action):
+        return self._inception + self._slope * action
+
+
+class EndEffectorWithDiscrete(MoveArmThenGripper):
+    _default_scene_bounds = [-0.3, -0.5, 0.6, 0.7, 0.5, 1.6]
+
+    def __init__(self,
+                 scene_bounds: Optional[Sequence[float]] = None
+                 ):
+        super().__init__(
+            EndEffectorPoseViaPlanning(
+                absolute_mode=True,
+                frame="world",
+                collision_checking=False
+            ),
+            Discrete(
+                attach_grasped_objects=True,
+                detach_before_open=True
+            )
+        )
+        scene_bounds = list(scene_bounds) if scene_bounds else self._default_scene_bounds
+        assert len(scene_bounds) == 6, f"Wrong scene bounds specification: {scene_bounds}"
+        self._lower_action_bounds = np.array(scene_bounds[:3] + 4 * [-1] + [0], dtype=np.float32)
+        self._upper_action_bounds = np.array(scene_bounds[3:] + 4 * [1] + [1], dtype=np.float32)
 
     def action(self, scene, action):
-        import pdb; pdb.set_trace()
         pos, rot, grip = np.split(action, [3, 7], axis=-1)
-        rot /= np.linalg.norm(rot, axis=-1)
+        rot /= np.linalg.norm(rot)
         action = np.concatenate([pos, rot, grip], axis=-1)
-        super().action(scene, action)
+        return super().action(scene, action)
 
-    @property
-    def act_space(self):
-        return gym.spaces.Box(
-            low=np.array(3 * [-1.] + 4*[-1.] + [0.], dtype=np.float32),
-            high=np.array(3 * [1.]+4*[1.] + [1.], dtype=np.float32),
-            dtype=np.float32,
-            shape=(8,)
-        )
+    def action_bounds(self):
+        return self._lower_action_bounds, self._upper_action_bounds
 
 
 def _make_observation_config(image_size):
     """There is a rich space for randomization and customization.
-    However, now only image size is used."""
+    However, only image size is used for now."""
     enabled_camera_config = CameraConfig(image_size=image_size)
     return ObservationConfig(
         left_shoulder_camera=_DISABLED_CAMERA,
@@ -73,29 +99,24 @@ def _make_observation_config(image_size):
     )
 
 
-def _rescale_action(action, lower_bound, upper_bound):
-    """If default action bounds differ from [-1, 1]^n this rescales it accordingly."""
-    return (upper_bound + lower_bound) / 2. + (upper_bound - lower_bound) / 2. * action
-
-
 # todo: deal with sparse rewards: now dense only available for reach_target
 class RLBenchEnv:
     def __init__(self, name: str, size: tuple = (64, 64), action_repeat: int = 1,
                  pn_number: int = 100):
-        # action_mode = VariableActionMode(_ROBOT_ACTION_DIM)
-        action_mode = PoseActionMode()
+        action_mode = EndEffectorWithDiscrete()
         self._action_mode = action_mode
+        self._action_rescaler = ActionRescale(*action_mode.action_bounds())
 
         obs_config = _make_observation_config(size)
         task = rlbench.utils.name_to_task_class(name)
-        self._lower_action_bound = action_mode.act_space.high
-        self._upper_action_bound = action_mode.act_space.low
+
         self._env = Environment(
             action_mode,
             obs_config=obs_config,
             headless=True,
             robot_setup=_ROBOT,
-            shaped_rewards=(name == "reach_target")
+            attach_grasped_objects=True,
+            shaped_rewards=(name == "reach_target"),
         )
         self._env.launch()
         self._task = self._env.get_task(task)
@@ -118,11 +139,11 @@ class RLBenchEnv:
     def step(self, action):
         action = action["action"]
         assert np.isfinite(action).all(), action
-        rescaled_action = _rescale_action(action, self._lower_action_bound,
-                                          self._upper_action_bound)
+        action = self._action_rescaler(action)
+
         reward = 0.0
         for _ in range(self._action_repeat):
-            obs, r, done = self._task.step(rescaled_action)
+            obs, r, done = self._task.step(action)
             reward += r or 0.0
             if done:
                 break
@@ -132,14 +153,20 @@ class RLBenchEnv:
             reward=reward,
             is_first=False,
             is_last=done,
-            is_terminal=done
+            is_terminal=done  # catch invalid IK or PlanningError
         )
         return obs
 
     @property
     def act_space(self):
-        # action = gym.spaces.Box(-1, 1, (_ROBOT_ACTION_DIM + 1,), dtype=np.float32)
-        return {"action": self._action_mode.act_space}
+        ones = np.ones_like(self._action_mode.action_bounds()[0], dtype=np.float32)
+        act_space = gym.spaces.Box(
+            low=-ones,
+            high=ones,
+            dtype=np.float32,
+            shape=ones.shape,
+        )
+        return {"action": act_space}
 
     @property
     def obs_space(self):
@@ -150,14 +177,15 @@ class RLBenchEnv:
             "flat_point_cloud": gym.spaces.Box(-np.inf, np.inf, self._size + (3,),
                                                dtype=np.float64),
             "point_cloud": gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float64),
-            "positions": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
-            "velocities": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
+            "joint_positions": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
+            "joint_velocities": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
+            "joint_forces": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
             "gripper_open": gym.spaces.Box(0, 1, (), dtype=float),
             "gripper_pose": gym.spaces.Box(-np.inf, np.inf, (7,), dtype=np.float64),
             "reward": gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
-            "is_first": gym.spaces.Box(0, 1, (), dtype=np.bool),
-            "if_last": gym.spaces.Box(0, 1, (), dtype=np.bool),
-            "is_terminal": gym.spaces.Box(0, 1, (), dtype=np.bool),
+            "is_first": gym.spaces.Box(0, 1, (), dtype=bool),
+            "if_last": gym.spaces.Box(0, 1, (), dtype=bool),
+            "is_terminal": gym.spaces.Box(0, 1, (), dtype=bool),
         }
 
     def _observation(self, obs: rlbench.backend.observation.Observation):
@@ -166,8 +194,9 @@ class RLBenchEnv:
             "image": obs.front_rgb,
             "flat_point_cloud": obs.front_point_cloud,
             "point_cloud": self._get_pc(obs.front_point_cloud),
-            "positions": obs.joint_positions,
-            "velocities": obs.joint_velocities,
+            "joint_positions": obs.joint_positions,
+            "joint_velocities": obs.joint_velocities,
+            "joint_forces": obs.joint_forces,
             "gripper_open": obs.gripper_open,
             "gripper_pose": obs.gripper_pose
         }
