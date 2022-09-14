@@ -192,16 +192,20 @@ class WorldModel(common.Module):
 
     @tf.function
     def video_pred(self, data, key):
+        prior_actions = 3
         decoder = self.heads['decoder']
         truth = data[key][:6] + 0.5
         embed = self.encoder(data)
         states, _ = self.rssm.observe(
-            embed[:6, :5], data['action'][:6, :5], data['is_first'][:6, :5])
+            embed[:6, :prior_actions],
+            data['action'][:6, :prior_actions],
+            data['is_first'][:6, :prior_actions]
+        )
         recon = decoder(self.rssm.get_feat(states))[key].mode()[:6]
         init = {k: v[:, -1] for k, v in states.items()}
-        prior = self.rssm.imagine(data['action'][:6, 5:], init)
+        prior = self.rssm.imagine(data['action'][:6, prior_actions:], init)
         openl = decoder(self.rssm.get_feat(prior))[key].mode()
-        model = tf.concat([recon[:, :5] + 0.5, openl + 0.5], 1)
+        model = tf.concat([recon[:, :prior_actions] + 0.5, openl + 0.5], 1)
         error = (model - truth + 1) / 2
         video = tf.concat([truth, model, error], 2)
         B, T, H, W, C = video.shape

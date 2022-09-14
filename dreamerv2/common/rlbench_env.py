@@ -1,5 +1,6 @@
 """RLBench (github.com/stepjam/RLBench) environment wrapper."""
-from typing import Optional, Sequence
+from typing import Sequence
+from collections import defaultdict
 
 import numpy as np
 import gym
@@ -7,17 +8,22 @@ import gym
 import rlbench
 import rlbench.utils
 import rlbench.backend
+from rlbench.demo import Demo
 from rlbench import Environment
+from rlbench.backend.scene import Scene
+from rlbench.backend.observation import Observation
+from rlbench.backend.exceptions import InvalidActionError
 from rlbench.action_modes.action_mode import JointPositionActionMode, MoveArmThenGripper
 from rlbench.action_modes.arm_action_modes import EndEffectorPoseViaPlanning
 from rlbench.action_modes.gripper_action_modes import Discrete
 from rlbench.observation_config import CameraConfig, ObservationConfig
 from rlbench.const import SUPPORTED_ROBOTS
 
+
 _TESTED_TASKS = ()
 _DISABLED_CAMERA = CameraConfig(rgb=False, depth=False, point_cloud=False, mask=False)
 _ROBOT = "panda"
-_ROBOT_ACTION_DIM = SUPPORTED_ROBOTS[_ROBOT][2]
+_ROBOT_DOF = SUPPORTED_ROBOTS[_ROBOT][2]
 
 
 class VariableActionMode(JointPositionActionMode):
@@ -46,11 +52,8 @@ class ActionRescale:
 
 
 class EndEffectorWithDiscrete(MoveArmThenGripper):
-    _default_scene_bounds = [-0.3, -0.5, 0.6, 0.7, 0.5, 1.6]
 
-    def __init__(self,
-                 scene_bounds: Optional[Sequence[float]] = None
-                 ):
+    def __init__(self):
         super().__init__(
             EndEffectorPoseViaPlanning(
                 absolute_mode=True,
@@ -62,19 +65,38 @@ class EndEffectorWithDiscrete(MoveArmThenGripper):
                 detach_before_open=True
             )
         )
-        scene_bounds = list(scene_bounds) if scene_bounds else self._default_scene_bounds
-        assert len(scene_bounds) == 6, f"Wrong scene bounds specification: {scene_bounds}"
-        self._lower_action_bounds = np.array(scene_bounds[:3] + 4 * [-1] + [0], dtype=np.float32)
-        self._upper_action_bounds = np.array(scene_bounds[3:] + 4 * [1] + [1], dtype=np.float32)
+        self._lower_action_bounds = None
+        self._upper_action_bounds = None
 
-    def action(self, scene, action):
+    def action(self, scene: Scene, action: np.ndarray):
+        self._assert_bounds_set()
         pos, rot, grip = np.split(action, [3, 7], axis=-1)
+        pos = np.clip(
+            pos,
+            a_min=self._lower_action_bounds[:3],
+            a_max=self._upper_action_bounds[:3]
+        )
         rot /= np.linalg.norm(rot)
         action = np.concatenate([pos, rot, grip], axis=-1)
         return super().action(scene, action)
 
     def action_bounds(self):
-        return self._lower_action_bounds, self._upper_action_bounds
+        self._assert_bounds_set()
+        return (
+            self._lower_action_bounds,
+            self._upper_action_bounds
+        )
+
+    def set_bounds(self, lower_action_bounds, upper_action_bounds):
+        """
+        RLBench.Environment requires action mode on initialization
+        but workspace boundaries can be known only after Task init.
+        """
+        self._lower_action_bounds = lower_action_bounds
+        self._upper_action_bounds = upper_action_bounds
+
+    def _assert_bounds_set(self):
+        assert isinstance(self._lower_action_bounds, np.ndarray), "Set bounds first."
 
 
 def _make_observation_config(image_size):
@@ -99,34 +121,87 @@ def _make_observation_config(image_size):
     )
 
 
+def _workspace_bounds(scene: Scene):
+    """Bounds from the scene workspace."""
+    from itertools import product
+    scene_bounds = [
+        getattr(scene, f"_workspace_{mode}{axis}")
+        for mode, axis in product(("min", "max"), "xyz")
+    ]
+    return (
+        np.array(scene_bounds[:3] + 3 * [-1] + [0, 0], dtype=np.float32),
+        np.array(scene_bounds[3:] + 4 * [1] + [1], dtype=np.float32),
+    )
+
+
+def _bounds_from_demos(demos: Sequence[Demo], fields: Sequence[str]):
+    """Iterate over prerecorded demos to infer values bounds
+    over requested fields."""
+    observations = defaultdict(list)
+    for demo in demos:
+        for field in fields:
+            observations[field].extend([getattr(obs, field) for obs in demo])
+
+    observations = {k: np.array(v) for k, v in observations.items()}
+    bounds = {k: [v.min(axis=0), v.max(axis=0)] for k, v in observations.items()}
+    return bounds, observations
+
+
+def _modify_action_min_max(action_min_max):
+    """
+    Copied directly from the Stephan's ARM repo
+    for proper comparison.
+    https://github.com/stepjam/ARM/blob/main/launch.py#L74
+    """
+    # Make translation bounds a little bigger
+    action_min_max[0][0:3] -= np.fabs(action_min_max[0][0:3]) * 0.2
+    action_min_max[1][0:3] += np.fabs(action_min_max[1][0:3]) * 0.2
+    action_min_max[0][-1] = 0
+    action_min_max[1][-1] = 1
+    action_min_max[0][3:7] = np.array([-1, -1, -1, 0])
+    action_min_max[1][3:7] = np.array([1, 1, 1, 1])
+    return action_min_max
+
+
 # todo: deal with sparse rewards: now dense only available for reach_target
 class RLBenchEnv:
-    def __init__(self, name: str, size: tuple = (64, 64), action_repeat: int = 1,
-                 pn_number: int = 100):
-        action_mode = EndEffectorWithDiscrete()
-        self._action_mode = action_mode
-        self._action_rescaler = ActionRescale(*action_mode.action_bounds())
 
+    def __init__(self,
+                 name: str,
+                 size: tuple = (64, 64),
+                 action_repeat: int = 1,
+                 pn_number: int = 100
+                 ):
         obs_config = _make_observation_config(size)
         task = rlbench.utils.name_to_task_class(name)
 
+        self._action_mode = EndEffectorWithDiscrete()
         self._env = Environment(
-            action_mode,
+            self._action_mode,
             obs_config=obs_config,
             headless=True,
             robot_setup=_ROBOT,
+            static_positions=False,
             attach_grasped_objects=True,
-            shaped_rewards=(name == "reach_target"),
+            shaped_rewards=False, #(name == "reach_target"),
         )
         self._env.launch()
         self._task = self._env.get_task(task)
+        self._scene = self._task._scene
+
+        lower_action_bounds, upper_action_bounds = self._get_actions_bounds()
+        self._action_mode.set_bounds(lower_action_bounds, upper_action_bounds)
+        self._action_rescaler = ActionRescale(
+            lower_action_bounds, upper_action_bounds)
 
         self._action_repeat = action_repeat
         self._size = size
         self._pn_number = pn_number
+        self._prev_observation = None
 
     def reset(self):
         desc, obs = self._task.reset()
+        self._prev_observation = obs
         obs = self._observation(obs)
         obs.update(
             is_first=True,
@@ -141,19 +216,25 @@ class RLBenchEnv:
         assert np.isfinite(action).all(), action
         action = self._action_rescaler(action)
 
+        obs = self._prev_observation
         reward = 0.0
-        for _ in range(self._action_repeat):
-            obs, r, done = self._task.step(action)
-            reward += r or 0.0
-            if done:
-                break
+        try:
+            for _ in range(self._action_repeat):
+                obs, r, done = self._task.step(action)
+                reward += r or 0.0
+                self._prev_observation = obs
+                if done:
+                    break
+        except InvalidActionError:
+            done = True
+            reward = 0.
 
         obs = self._observation(obs)
         obs.update(
             reward=reward,
             is_first=False,
             is_last=done,
-            is_terminal=done  # catch invalid IK or PlanningError
+            is_terminal=done
         )
         return obs
 
@@ -170,17 +251,17 @@ class RLBenchEnv:
 
     @property
     def obs_space(self):
-        pos_shape = self._env.action_shape
+        joint_shape = (_ROBOT_DOF,)
         return {
             "image": gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
             "depth": gym.spaces.Box(0, np.inf, self._size, dtype=np.float32),
             "flat_point_cloud": gym.spaces.Box(-np.inf, np.inf, self._size + (3,),
                                                dtype=np.float64),
             "point_cloud": gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float64),
-            "joint_positions": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
-            "joint_velocities": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
-            "joint_forces": gym.spaces.Box(-np.inf, np.inf, pos_shape, dtype=np.float64),
-            "gripper_open": gym.spaces.Box(0, 1, (), dtype=float),
+            "joint_positions": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
+            "joint_velocities": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
+            "joint_forces": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
+            "gripper_open": gym.spaces.Box(0, 1, (1,), dtype=np.float32),
             "gripper_pose": gym.spaces.Box(-np.inf, np.inf, (7,), dtype=np.float64),
             "reward": gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
             "is_first": gym.spaces.Box(0, 1, (), dtype=bool),
@@ -188,7 +269,7 @@ class RLBenchEnv:
             "is_terminal": gym.spaces.Box(0, 1, (), dtype=bool),
         }
 
-    def _observation(self, obs: rlbench.backend.observation.Observation):
+    def _observation(self, obs: Observation):
         return {
             "depth": obs.front_depth,
             "image": obs.front_rgb,
@@ -197,7 +278,7 @@ class RLBenchEnv:
             "joint_positions": obs.joint_positions,
             "joint_velocities": obs.joint_velocities,
             "joint_forces": obs.joint_forces,
-            "gripper_open": obs.gripper_open,
+            "gripper_open": np.array(obs.gripper_open, dtype=np.float32)[np.newaxis],
             "gripper_pose": obs.gripper_pose
         }
 
@@ -208,5 +289,46 @@ class RLBenchEnv:
         assert pcd.shape[0] == self._pn_number
         return pcd
 
+    def _get_actions_bounds(self):
+        demos = self._task.get_demos(amount=7, live_demos=True)
+        action_bounds, _ = _bounds_from_demos(demos, ("gripper_pose",))
+        lower_bounds, upper_bounds = action_bounds["gripper_pose"]
+        # Append gripper bounds.
+        lower_bounds = np.concatenate((lower_bounds, [0]), dtype=np.float32)
+        upper_bounds = np.concatenate((upper_bounds, [1]), dtype=np.float32)
+        lower_bounds, upper_bounds = _modify_action_min_max([lower_bounds, upper_bounds])
+
+        scene_bounds = _workspace_bounds(self._scene)
+        lower_bounds = np.maximum(lower_bounds, scene_bounds[0])
+        upper_bounds = np.minimum(upper_bounds, scene_bounds[1])
+
+        return lower_bounds, upper_bounds
+
     def close(self):
         self._env.shutdown()
+
+    def prepare_demos(self, amount: int = 10):
+        demos = self._task.get_demos(amount, live_demos=True)
+        episodes = []
+        for demo in demos:
+            length = len(demo)
+            episode = defaultdict(list)
+            for i, obs in enumerate(demo):
+                is_last = (i == length - 1)
+                obs = self._observation(obs)
+                arm_action = obs["gripper_pose"]
+                gripper_action = obs["gripper_open"] < 0.5
+                action = np.concatenate([arm_action, gripper_action], dtype=np.float32)
+                obs.update(
+                    reward=is_last,
+                    is_first=(i == 0),
+                    is_last=is_last,
+                    is_terminal=is_last,
+                    action=action
+                )
+                for k, v in obs.items():
+                    episode[k].append(v)
+
+            episodes.append(episode)
+
+        return episodes

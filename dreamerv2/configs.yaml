@@ -178,16 +178,17 @@ dmc_point_cloud:
 
 rlbench:
 
-  task: reach_target
-  time_limit: 100
+  task: rlbench_reach_target
+  time_limit: 50
   encoder: { pn_keys: '$^' }
   decoder: { pn_keys: '$^' }
-  eval_every: 1e3
-  prefill: 500
-  pretrain: 100
+  eval_every: 500
+  prefill: 10
+  pretrain: 1
   clip_rewards: identity
   pred_discount: False
-  replay.prioritize_ends: False
+  replay: { capacity: 1e5, minlen: 4, maxlen: 50, prioritize_ends: False }
+  dataset: {batch: 64, length: 4}
   grad_heads: [ decoder, reward ]
   rssm: { hidden: 200, deter: 200 }
   model_opt.lr: 3e-4
