@@ -13,8 +13,8 @@ from rlbench import Environment
 from rlbench.backend.scene import Scene
 from rlbench.backend.observation import Observation
 from rlbench.backend.exceptions import InvalidActionError
-from rlbench.action_modes.action_mode import JointPositionActionMode, MoveArmThenGripper
-from rlbench.action_modes.arm_action_modes import EndEffectorPoseViaPlanning
+from rlbench.action_modes.action_mode import MoveArmThenGripper
+from rlbench.action_modes.arm_action_modes import EndEffectorPoseViaPlanning, JointPosition
 from rlbench.action_modes.gripper_action_modes import Discrete
 from rlbench.observation_config import CameraConfig, ObservationConfig
 from rlbench.const import SUPPORTED_ROBOTS
@@ -26,19 +26,8 @@ _ROBOT = "panda"
 _ROBOT_DOF = SUPPORTED_ROBOTS[_ROBOT][2]
 
 
-class VariableActionMode(JointPositionActionMode):
-    def __init__(self, robot_action_dim):
-        super().__init__()
-        self._robot_act_dim = robot_action_dim
-
-    def action_bounds(self):
-        return (
-            np.array(self._robot_act_dim * [-0.1] + [0.0]),
-            np.array(self._robot_act_dim * [0.1] + [0.04])
-        )
-
-
 class ActionRescale:
+    # However Dreamer has its own common.envs.NormalizeAction
     def __init__(self, lower_bound: np.ndarray, upper_bound: np.ndarray):
         lower_bound, upper_bound = map(
             lambda bound: np.asanyarray(bound, dtype=np.float32),
@@ -51,7 +40,46 @@ class ActionRescale:
         return self._inception + self._slope * action
 
 
-class EndEffectorWithDiscrete(MoveArmThenGripper):
+class PostponedActionMode(MoveArmThenGripper):
+    """
+    RLBench.Environment requires action mode on initialization
+    but workspace boundaries may be set after Scene init
+    or after demos generation.
+    """
+    def __init__(self, arm_action_mode, gripper_action_mode):
+        super().__init__(arm_action_mode, gripper_action_mode)
+        self._lower_action_bounds = None
+        self._upper_action_bounds = None
+
+    def action_bounds(self):
+        self._assert_bounds_set()
+        return (
+            self._lower_action_bounds,
+            self._upper_action_bounds
+        )
+
+    def set_bounds(self, lower_action_bound: np.ndarray, upper_action_bound: np.ndarray):
+        self._lower_action_bounds = lower_action_bound
+        self._upper_action_bounds = upper_action_bound
+
+    def _assert_bounds_set(self):
+        assert isinstance(self._lower_action_bounds, np.ndarray), "Set action bounds first."
+
+
+class JointsWithDiscrete(PostponedActionMode):
+    def __init__(self):
+        super().__init__(
+            JointPosition(absolute_mode=False),
+            Discrete(attach_grasped_objects=True,
+                     detach_before_open=True)
+        )
+
+    def action(self, scene: Scene, action: np.ndarray):
+        self._assert_bounds_set()
+        return super().action(scene, action)
+
+
+class EndEffectorWithDiscrete(PostponedActionMode):
 
     def __init__(self):
         super().__init__(
@@ -65,8 +93,6 @@ class EndEffectorWithDiscrete(MoveArmThenGripper):
                 detach_before_open=True
             )
         )
-        self._lower_action_bounds = None
-        self._upper_action_bounds = None
 
     def action(self, scene: Scene, action: np.ndarray):
         self._assert_bounds_set()
@@ -79,24 +105,6 @@ class EndEffectorWithDiscrete(MoveArmThenGripper):
         rot /= np.linalg.norm(rot)
         action = np.concatenate([pos, rot, grip], axis=-1)
         return super().action(scene, action)
-
-    def action_bounds(self):
-        self._assert_bounds_set()
-        return (
-            self._lower_action_bounds,
-            self._upper_action_bounds
-        )
-
-    def set_bounds(self, lower_action_bounds, upper_action_bounds):
-        """
-        RLBench.Environment requires action mode on initialization
-        but workspace boundaries can be known only after Task init.
-        """
-        self._lower_action_bounds = lower_action_bounds
-        self._upper_action_bounds = upper_action_bounds
-
-    def _assert_bounds_set(self):
-        assert isinstance(self._lower_action_bounds, np.ndarray), "Set bounds first."
 
 
 def _make_observation_config(image_size):
@@ -128,10 +136,8 @@ def _workspace_bounds(scene: Scene):
         getattr(scene, f"_workspace_{mode}{axis}")
         for mode, axis in product(("min", "max"), "xyz")
     ]
-    return (
-        np.array(scene_bounds[:3] + 3 * [-1] + [0, 0], dtype=np.float32),
-        np.array(scene_bounds[3:] + 4 * [1] + [1], dtype=np.float32),
-    )
+    scene_bounds = np.float32(scene_bounds)
+    return np.split(scene_bounds, 2)
 
 
 def _bounds_from_demos(demos: Sequence[Demo], fields: Sequence[str]):
@@ -142,9 +148,9 @@ def _bounds_from_demos(demos: Sequence[Demo], fields: Sequence[str]):
         for field in fields:
             observations[field].extend([getattr(obs, field) for obs in demo])
 
-    observations = {k: np.array(v) for k, v in observations.items()}
+    observations = {k: np.float32(v) for k, v in observations.items()}
     bounds = {k: [v.min(axis=0), v.max(axis=0)] for k, v in observations.items()}
-    return bounds, observations
+    return bounds
 
 
 def _modify_action_min_max(action_min_max):
@@ -175,7 +181,7 @@ class RLBenchEnv:
         obs_config = _make_observation_config(size)
         task = rlbench.utils.name_to_task_class(name)
 
-        self._action_mode = EndEffectorWithDiscrete()
+        self._action_mode = JointsWithDiscrete()
         self._env = Environment(
             self._action_mode,
             obs_config=obs_config,
@@ -291,7 +297,7 @@ class RLBenchEnv:
 
     def _get_actions_bounds(self):
         demos = self._task.get_demos(amount=7, live_demos=True)
-        action_bounds, _ = _bounds_from_demos(demos, ("gripper_pose",))
+        action_bounds = _bounds_from_demos(demos, ("gripper_pose",))
         lower_bounds, upper_bounds = action_bounds["gripper_pose"]
         # Append gripper bounds.
         lower_bounds = np.concatenate((lower_bounds, [0]), dtype=np.float32)
@@ -299,8 +305,12 @@ class RLBenchEnv:
         lower_bounds, upper_bounds = _modify_action_min_max([lower_bounds, upper_bounds])
 
         scene_bounds = _workspace_bounds(self._scene)
-        lower_bounds = np.maximum(lower_bounds, scene_bounds[0])
-        upper_bounds = np.minimum(upper_bounds, scene_bounds[1])
+        lower_bounds[:3] = np.maximum(lower_bounds[:3], scene_bounds[0])
+        upper_bounds[:3] = np.minimum(upper_bounds[:3], scene_bounds[1])
+
+        if isinstance(self._action_mode, JointsWithDiscrete):
+            lower_bounds[:-1] /= 10.
+            upper_bounds[:-1] /= 10.
 
         return lower_bounds, upper_bounds
 
@@ -317,10 +327,10 @@ class RLBenchEnv:
                 is_last = (i == length - 1)
                 obs = self._observation(obs)
                 arm_action = obs["gripper_pose"]
-                gripper_action = obs["gripper_open"] < 0.5
+                gripper_action = obs["gripper_open"] < 0.5  # that's not it
                 action = np.concatenate([arm_action, gripper_action], dtype=np.float32)
                 obs.update(
-                    reward=is_last,
+                    reward=float(is_last),
                     is_first=(i == 0),
                     is_last=is_last,
                     is_terminal=is_last,
