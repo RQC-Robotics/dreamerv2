@@ -99,7 +99,6 @@ def main():
                 size=config.render_size,
                 pn_number=config.pn_number
             )
-            env = common.NormalizeAction(env)
         else:
             raise NotImplementedError(suite)
         env = common.TimeLimit(env, config.time_limit)
@@ -128,8 +127,9 @@ def main():
 
     print('Create envs.')
     num_eval_envs = min(config.envs, config.eval_eps)
+    is_rlbench = config.task.startswith('rlbench')
     if config.envs_parallel == 'none':
-        if config.task.startswith('rlbench'):
+        if is_rlbench:
             assert config.envs == 1
             train_envs = [make_env('train')]
             eval_envs = train_envs
@@ -155,11 +155,17 @@ def main():
     prefill = max(0, config.prefill - train_replay.stats['total_steps'])
     if prefill:
         print(f'Prefill dataset ({prefill} steps).')
-        random_agent = common.RandomAgent(act_space)
-        train_driver(random_agent, steps=prefill, episodes=1)
-        eval_driver(random_agent, episodes=1)
-        train_driver.reset()
-        eval_driver.reset()
+        if is_rlbench:
+            episodes = train_envs[0].prepare_demos(prefill)
+            for episode in episodes:
+                train_replay.add_episode(episode)
+            eval_replay.add_episode(episodes[0])
+        else:
+            random_agent = common.RandomAgent(act_space)
+            train_driver(random_agent, steps=prefill, episodes=1)
+            eval_driver(random_agent, episodes=1)
+            train_driver.reset()
+            eval_driver.reset()
 
     print('Create agent.')
     train_dataset = iter(train_replay.dataset(**config.dataset))
@@ -174,7 +180,11 @@ def main():
     else:
         print('Pretrain agent.')
         for _ in range(config.pretrain):
-            train_agent(next(train_dataset))
+            if is_rlbench:
+                met = agnt.behaviour_cloning(next(train_dataset))
+                print(met)
+            else:
+                train_agent(next(train_dataset))
     train_policy = lambda *args: agnt.policy(
         *args, mode='explore' if should_expl(step) else 'train')
     eval_policy = lambda *args: agnt.policy(*args, mode='eval')
@@ -197,11 +207,11 @@ def main():
         logger.write()
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
-        if config.task.startswith('rlbench'):
+        if is_rlbench:
             eval_driver.reset()
         eval_driver(eval_policy, episodes=config.eval_eps)
         print('Start training.')
-        if config.task.startswith('rlbench'):
+        if is_rlbench:
             train_driver.reset()
         train_driver(train_policy, steps=config.eval_every)
         agnt.save(logdir / 'variables.pkl')

@@ -78,6 +78,20 @@ class Agent(common.Module):
             report[f'openl_{name}'] = self.wm.video_pred(data, key)
         return report
 
+    @tf.function
+    def behaviour_cloning(self, data):
+        data = self.wm.preprocess(data)
+        embed = self.wm.encoder(data)
+        post, prior = self.wm.rssm.observe(
+            embed, data['action'], data['is_first'])
+        feat = self.wm.rssm.get_feat(post)
+        with tf.GradientTape() as actor_tape:
+            policy = self._task_behavior.actor(feat)
+            log_probs = policy.log_prob(data['action'])
+            loss = - log_probs.mean()
+        return self._task_behavior.actor_opt(
+            actor_tape, loss, self._task_behavior.actor)
+
 
 class WorldModel(common.Module):
 
@@ -174,12 +188,10 @@ class WorldModel(common.Module):
         for key, value in obs.items():
             if key.startswith('log_'):
                 continue
-            if value.dtype == tf.int32:
+            if value.dtype in (tf.int32, tf.float64):
                 value = value.astype(dtype)
             if value.dtype == tf.uint8:
                 value = value.astype(dtype) / 255.0 - 0.5
-            if key == 'point_cloud':
-                value = value.astype(dtype)
             if key == 'depth_map':
                 value = tf.where(tf.math.is_nan(value),
                                  tf.ones_like(value),

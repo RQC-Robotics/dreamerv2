@@ -1,4 +1,4 @@
-from typing import NamedTuple, TypedDict, Union, Iterable
+from typing import NamedTuple, TypedDict, Union, Sequence
 import numpy as np
 
 
@@ -66,7 +66,7 @@ def camera_params_from_physics(physics, render_kwargs: CameraParams):
 class PointCloudGenerator:
     def __init__(self,
                  pn_number: int,
-                 cameras_params: Iterable[CameraParams],
+                 cameras_params: Sequence[CameraParams],
                  stride: int = -1
                  ):
 
