@@ -1,4 +1,5 @@
 """RLBench (github.com/stepjam/RLBench) environment wrapper."""
+import abc
 from typing import Sequence
 from collections import defaultdict
 
@@ -27,7 +28,6 @@ _ROBOT_DOF = SUPPORTED_ROBOTS[_ROBOT][2]
 
 
 class ActionRescale:
-    # However Dreamer has its own common.envs.NormalizeAction
     def __init__(self, lower_bound: np.ndarray, upper_bound: np.ndarray):
         lower_bound, upper_bound = map(
             lambda bound: np.asanyarray(bound, dtype=np.float32),
@@ -36,20 +36,27 @@ class ActionRescale:
         self._slope = (upper_bound - lower_bound) / 2.
         self._inception = (upper_bound + lower_bound) / 2.
 
-    def __call__(self, action):
+    def forward(self, action):
+        """[-1, 1] -> [lb, ub]"""
         return self._inception + self._slope * action
+
+    def inverse(self, action):
+        """[lb, ub] -> [-1, 1]"""
+        action = (action - self._inception) / self._slope
+        return np.clip(action, -1, 1)
 
 
 class PostponedActionMode(MoveArmThenGripper):
     """
     RLBench.Environment requires action mode on initialization
-    but workspace boundaries may be set after Scene init
+    but a workspace boundaries may be set after Scene init
     or after demos generation.
     """
     def __init__(self, arm_action_mode, gripper_action_mode):
         super().__init__(arm_action_mode, gripper_action_mode)
         self._lower_action_bounds = None
         self._upper_action_bounds = None
+        self._rescaler = None
 
     def action_bounds(self):
         self._assert_bounds_set()
@@ -61,9 +68,17 @@ class PostponedActionMode(MoveArmThenGripper):
     def set_bounds(self, lower_action_bound: np.ndarray, upper_action_bound: np.ndarray):
         self._lower_action_bounds = lower_action_bound
         self._upper_action_bounds = upper_action_bound
+        self._rescaler = ActionRescale(lower_action_bound, upper_action_bound)
 
     def _assert_bounds_set(self):
         assert isinstance(self._lower_action_bounds, np.ndarray), "Set action bounds first."
+
+    @abc.abstractmethod
+    def ingest(self, demo: Demo) -> np.ndarray:
+        """
+        Infer actions from the demonstration.
+        Used for imitation learning.
+        """
 
 
 class JointsWithDiscrete(PostponedActionMode):
@@ -76,7 +91,22 @@ class JointsWithDiscrete(PostponedActionMode):
 
     def action(self, scene: Scene, action: np.ndarray):
         self._assert_bounds_set()
+        action = self._rescaler.forward(action)
         return super().action(scene, action)
+
+    def ingest(self, demo: Demo) -> np.ndarray:
+        actions = []
+        last_pose = demo[0].gripper_pose
+        for obs in demo[1:]:
+            action = np.concatenate(
+                (obs.gripper_pose - last_pose, [obs.gripper_open]),
+                dtype=np.float32
+            )
+            action = self._rescaler.inverse(action)
+            last_pose = obs.gripper_pose
+            actions.append(action)
+        actions.append(np.zeros_like(action))
+        return np.float32(actions)
 
 
 class EndEffectorWithDiscrete(PostponedActionMode):
@@ -96,6 +126,7 @@ class EndEffectorWithDiscrete(PostponedActionMode):
 
     def action(self, scene: Scene, action: np.ndarray):
         self._assert_bounds_set()
+        action = self._rescaler.forward(action)
         pos, rot, grip = np.split(action, [3, 7], axis=-1)
         pos = np.clip(
             pos,
@@ -105,6 +136,13 @@ class EndEffectorWithDiscrete(PostponedActionMode):
         rot /= np.linalg.norm(rot)
         action = np.concatenate([pos, rot, grip], axis=-1)
         return super().action(scene, action)
+
+    def ingest(self, demo: Demo):
+        actions = np.stack(
+            [[obs.pose] + [obs.gripper_open] for obs in demo],
+            dtype=np.float32
+        )
+        return actions
 
 
 def _make_observation_config(image_size):
@@ -149,7 +187,7 @@ def _bounds_from_demos(demos: Sequence[Demo], fields: Sequence[str]):
             observations[field].extend([getattr(obs, field) for obs in demo])
 
     observations = {k: np.float32(v) for k, v in observations.items()}
-    bounds = {k: [v.min(axis=0), v.max(axis=0)] for k, v in observations.items()}
+    bounds = {k: (v.min(axis=0), v.max(axis=0)) for k, v in observations.items()}
     return bounds
 
 
@@ -189,7 +227,7 @@ class RLBenchEnv:
             robot_setup=_ROBOT,
             static_positions=False,
             attach_grasped_objects=True,
-            shaped_rewards=False, #(name == "reach_target"),
+            shaped_rewards=name in ("reach_target", "take_lid_off_saucepan"),
         )
         self._env.launch()
         self._task = self._env.get_task(task)
@@ -197,8 +235,6 @@ class RLBenchEnv:
 
         lower_action_bounds, upper_action_bounds = self._get_actions_bounds()
         self._action_mode.set_bounds(lower_action_bounds, upper_action_bounds)
-        self._action_rescaler = ActionRescale(
-            lower_action_bounds, upper_action_bounds)
 
         self._action_repeat = action_repeat
         self._size = size
@@ -220,7 +256,6 @@ class RLBenchEnv:
     def step(self, action):
         action = action["action"]
         assert np.isfinite(action).all(), action
-        action = self._action_rescaler(action)
 
         obs = self._prev_observation
         reward = 0.0
@@ -296,7 +331,7 @@ class RLBenchEnv:
         return pcd
 
     def _get_actions_bounds(self):
-        demos = self._task.get_demos(amount=7, live_demos=True)
+        demos = self._task.get_demos(amount=10, live_demos=True)
         action_bounds = _bounds_from_demos(demos, ("gripper_pose",))
         lower_bounds, upper_bounds = action_bounds["gripper_pose"]
         # Append gripper bounds.
@@ -309,8 +344,8 @@ class RLBenchEnv:
         upper_bounds[:3] = np.minimum(upper_bounds[:3], scene_bounds[1])
 
         if isinstance(self._action_mode, JointsWithDiscrete):
-            lower_bounds[:-1] /= 10.
-            upper_bounds[:-1] /= 10.
+            lower_bounds[:-1] /= 5.
+            upper_bounds[:-1] /= 5.
 
         return lower_bounds, upper_bounds
 
@@ -323,18 +358,18 @@ class RLBenchEnv:
         for demo in demos:
             length = len(demo)
             episode = defaultdict(list)
-            for i, obs in enumerate(demo):
+            actions = self._action_mode.ingest(demo)
+            for i, (act, obs) in enumerate(zip(actions, demo)):
                 is_last = (i == length - 1)
+                if is_last:
+                    continue
                 obs = self._observation(obs)
-                arm_action = obs["gripper_pose"]
-                gripper_action = obs["gripper_open"] < 0.5  # that's not it
-                action = np.concatenate([arm_action, gripper_action], dtype=np.float32)
                 obs.update(
                     reward=float(is_last),
                     is_first=(i == 0),
                     is_last=is_last,
                     is_terminal=is_last,
-                    action=action
+                    action=act
                 )
                 for k, v in obs.items():
                     episode[k].append(v)

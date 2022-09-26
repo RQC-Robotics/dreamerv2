@@ -78,6 +78,20 @@ class Agent(common.Module):
             report[f'openl_{name}'] = self.wm.video_pred(data, key)
         return report
 
+    @tf.function
+    def behaviour_cloning(self, data):
+        data = self.wm.preprocess(data)
+        embed = self.wm.encoder(data)
+        post, prior = self.wm.rssm.observe(
+            embed, data['action'], data['is_first'])
+        feat = self.wm.rssm.get_feat(post)
+        with tf.GradientTape() as actor_tape:
+            policy = self._task_behavior.actor(feat)
+            log_probs = policy.log_prob(data['action'])
+            loss = - log_probs.mean()
+        return self._task_behavior.actor_opt(
+            actor_tape, loss, self._task_behavior.actor)
+
 
 class WorldModel(common.Module):
 
