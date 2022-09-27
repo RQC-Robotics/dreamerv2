@@ -188,8 +188,8 @@ rlbench:
   pretrain: 100
   clip_rewards: identity
   pred_discount: False
-  replay: { capacity: 1e5, minlen: 30, maxlen: 50, prioritize_ends: False }
-  dataset: {batch: 64, length: 30}
+  replay: { capacity: 1e5, minlen: 20, maxlen: 50, prioritize_ends: False }
+  dataset: {batch: 64, length: 20}
   grad_heads: [ decoder, reward ]
   rssm: { hidden: 200, deter: 200 }
   model_opt.lr: 3e-4
