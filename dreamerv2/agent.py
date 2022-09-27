@@ -218,11 +218,9 @@ class WorldModel(common.Module):
         init = {k: v[:, -1] for k, v in states.items()}
         prior = self.rssm.imagine(data['action'][:6, 5:], init)
         openl = decoder(self.rssm.get_feat(prior))[key].mode()
-        # return openl[0] + 0.5
         model = tf.concat([recon[:, :5] + 0.5, openl + 0.5], 1)
         error = (model - truth + 1) / 2
         video = tf.concat([truth, model, error], 2)
-        # return video[0]
         B, T, H, W, C = video.shape
         return video.transpose((1, 2, 0, 3, 4)).reshape((T, H, B * W, C))
 
