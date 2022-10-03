@@ -23,8 +23,9 @@ from rlbench.const import SUPPORTED_ROBOTS
 
 _TESTED_TASKS = ()
 _DISABLED_CAMERA = CameraConfig(rgb=False, depth=False, point_cloud=False, mask=False)
-_ROBOT = "panda"
+_ROBOT = "ur5"
 _ROBOT_DOF = SUPPORTED_ROBOTS[_ROBOT][2]
+DENSE_REWARD_TASKS = ("reach_target", "take_lid_off_saucepan", "slide_block_to_target")
 
 
 class ActionRescale:
@@ -48,7 +49,7 @@ class ActionRescale:
 
 class PostponedActionMode(MoveArmThenGripper):
     """
-    RLBench.Environment requires action mode on initialization
+    RLBench.Environment requires an action mode on initialization,
     but a workspace boundaries may be set after Scene init
     or after demos generation.
     """
@@ -196,6 +197,8 @@ def _modify_action_min_max(action_min_max):
     Copied directly from the Stephan's ARM repo
     for proper comparison.
     https://github.com/stepjam/ARM/blob/main/launch.py#L74
+
+    Only applicable to JointPose(absolute=True) arm action mode.
     """
     # Make translation bounds a little bigger
     action_min_max[0][0:3] -= np.fabs(action_min_max[0][0:3]) * 0.2
@@ -227,7 +230,7 @@ class RLBenchEnv:
             robot_setup=_ROBOT,
             static_positions=False,
             attach_grasped_objects=True,
-            shaped_rewards=name in ("reach_target", "take_lid_off_saucepan"),
+            shaped_rewards=name in DENSE_REWARD_TASKS,
         )
         self._env.launch()
         self._task = self._env.get_task(task)

@@ -134,7 +134,10 @@ class WorldModel(common.Module):
             dists = out if isinstance(out, dict) else {name: out}
             for key, dist in dists.items():
                 if key == 'point_cloud':
-                    like = - tf.cast(chamfer_distance.evaluate(data[key], dist.mean()), tf.float32)
+                    like = - tf.cast(
+                        chamfer_distance.evaluate(data[key], dist.mean()),
+                        tf.float32
+                    )
                 else:
                     like = tf.cast(dist.log_prob(data[key]), tf.float32)
                 likes[key] = like
