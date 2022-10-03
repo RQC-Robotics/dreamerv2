@@ -185,7 +185,7 @@ rlbench:
   encoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^' }
   decoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^' }
   eval_every: 1000
-  prefill: 100
+  prefill: 1000
   pretrain: 100
   clip_rewards: identity
   pred_discount: False

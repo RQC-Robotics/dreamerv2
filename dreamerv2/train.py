@@ -157,10 +157,11 @@ def main():
     if prefill:
         print(f'Prefill dataset ({prefill} steps).')
         if is_rlbench:
-            episodes = train_envs[0].prepare_demos(prefill)
-            for episode in episodes:
-                train_replay.add_episode(episode)
-            eval_replay.add_episode(episodes[0])
+            ep = lambda: train_envs[0].prepare_demos(1)[0]
+            while train_replay.stats['total_steps'] < prefill:
+                train_replay.add_episode(ep())
+            while eval_replay.stats['total_episodes'] < 1:
+                eval_replay.add_episode(ep())
         else:
             random_agent = common.RandomAgent(act_space)
             train_driver(random_agent, steps=prefill, episodes=1)
