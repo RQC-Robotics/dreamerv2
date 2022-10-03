@@ -110,6 +110,7 @@ def main():
         print(f'{mode.title()} episode has {length} steps and return {score:.1f}.')
         logger.scalar(f'{mode}_return', score)
         logger.scalar(f'{mode}_length', length)
+        logger.scalar(f'{mode}_success', ep['success'][-1])
         for key, value in ep.items():
             if re.match(config.log_keys_sum, key):
                 logger.scalar(f'sum_{mode}_{key}', ep[key].sum())

@@ -22,7 +22,6 @@ from rlbench.const import SUPPORTED_ROBOTS
 
 
 _TESTED_TASKS = ()
-_DISABLED_CAMERA = CameraConfig(rgb=False, depth=False, point_cloud=False, mask=False)
 _ROBOT = "ur5"
 _ROBOT_DOF = SUPPORTED_ROBOTS[_ROBOT][2]
 DENSE_REWARD_TASKS = ("reach_target", "take_lid_off_saucepan", "slide_block_to_target")
@@ -149,12 +148,16 @@ class EndEffectorWithDiscrete(PostponedActionMode):
 def _make_observation_config(image_size):
     """There is a rich space for randomization and customization.
     However, only image size is used for now."""
-    enabled_camera_config = CameraConfig(image_size=image_size)
+    enabled_camera_config = CameraConfig(
+        image_size=image_size,
+    )
+    disabled_camera = CameraConfig()
+    disabled_camera.set_all(False)
     return ObservationConfig(
-        left_shoulder_camera=_DISABLED_CAMERA,
-        right_shoulder_camera=_DISABLED_CAMERA,
-        overhead_camera=_DISABLED_CAMERA,
-        wrist_camera=_DISABLED_CAMERA,
+        left_shoulder_camera=disabled_camera,
+        right_shoulder_camera=disabled_camera,
+        overhead_camera=disabled_camera,
+        wrist_camera=disabled_camera,
         front_camera=enabled_camera_config,
         joint_velocities=True,
         joint_positions=True,
@@ -252,7 +255,8 @@ class RLBenchEnv:
             is_first=True,
             reward=0.0,
             is_last=False,
-            is_terminal=False
+            is_terminal=False,
+            success=False
         )
         return obs
 
@@ -260,25 +264,29 @@ class RLBenchEnv:
         action = action["action"]
         assert np.isfinite(action).all(), action
 
-        obs = self._prev_observation
-        reward = 0.0
         try:
+            reward = 0.0
             for _ in range(self._action_repeat):
                 obs, r, done = self._task.step(action)
                 reward += r or 0.0
-                self._prev_observation = obs
+                success, _ = self._task._task.success()
                 if done:
                     break
+                self._prev_observation = obs
+
         except InvalidActionError:
             done = True
             reward = 0.
+            success = False
+            obs = self._prev_observation
 
         obs = self._observation(obs)
         obs.update(
             reward=reward,
             is_first=False,
             is_last=done,
-            is_terminal=done
+            is_terminal=done,
+            success=success
         )
         return obs
 
@@ -311,6 +319,7 @@ class RLBenchEnv:
             "is_first": gym.spaces.Box(0, 1, (), dtype=bool),
             "if_last": gym.spaces.Box(0, 1, (), dtype=bool),
             "is_terminal": gym.spaces.Box(0, 1, (), dtype=bool),
+            "success": gym.spaces.Box(0, 1, (), dtype=bool)
         }
 
     def _observation(self, obs: Observation):
