@@ -22,7 +22,7 @@ from rlbench.const import SUPPORTED_ROBOTS
 
 
 _TESTED_TASKS = ()
-_ROBOT = "ur5"
+_ROBOT = "panda"
 _ROBOT_DOF = SUPPORTED_ROBOTS[_ROBOT][2]
 DENSE_REWARD_TASKS = ("reach_target", "take_lid_off_saucepan", "slide_block_to_target")
 
