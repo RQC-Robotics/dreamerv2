@@ -45,7 +45,7 @@ def main():
     import tensorflow as tf
     tf.config.experimental_run_functions_eagerly(not config.jit)
     message = 'No GPU found. To actually train on CPU remove this assert.'
-    assert tf.config.experimental.list_physical_devices('GPU'), message
+    # assert tf.config.experimental.list_physical_devices('GPU'), message
     for gpu in tf.config.experimental.list_physical_devices('GPU'):
         tf.config.experimental.set_memory_growth(gpu, True)
     assert config.precision in (16, 32), config.precision
@@ -99,6 +99,12 @@ def main():
                 size=config.render_size,
                 pn_number=config.pn_number
             )
+        elif suite == "ur5":
+            env = common.UR5(
+                size=config.render_size,
+                action_repeat=config.action_repeat
+            )
+            env = common.NormalizeAction(env)
         else:
             raise NotImplementedError(suite)
         env = common.TimeLimit(env, config.time_limit)
@@ -110,7 +116,7 @@ def main():
         print(f'{mode.title()} episode has {length} steps and return {score:.1f}.')
         logger.scalar(f'{mode}_return', score)
         logger.scalar(f'{mode}_length', length)
-        logger.scalar(f'{mode}_success', ep['success'][-1])
+        #logger.scalar(f'{mode}_success', ep['success'][-1])
         for key, value in ep.items():
             if re.match(config.log_keys_sum, key):
                 logger.scalar(f'sum_{mode}_{key}', ep[key].sum())
@@ -129,8 +135,9 @@ def main():
     print('Create envs.')
     num_eval_envs = min(config.envs, config.eval_eps)
     is_rlbench = config.task.startswith('rlbench')
+    is_ur5 = config.task.startswith('ur5')
     if config.envs_parallel == 'none':
-        if is_rlbench:
+        if is_rlbench or is_ur5:
             assert config.envs == 1
             train_envs = [make_env('train')]
             eval_envs = train_envs
@@ -209,11 +216,11 @@ def main():
         logger.write()
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
-        if is_rlbench:
+        if is_rlbench or is_ur5:
             eval_driver.reset()
         eval_driver(eval_policy, episodes=config.eval_eps)
         print('Start training.')
-        if is_rlbench:
+        if is_rlbench or is_ur5:
             train_driver.reset()
         train_driver(train_policy, steps=config.eval_every)
         agnt.save(logdir / 'variables.pkl')
