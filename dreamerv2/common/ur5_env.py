@@ -33,7 +33,7 @@ class UR5:
 
     def step(self, action):
         action = action['action']
-        action = {'arm' : np.concatenate([action, np.zeros((3,))])}
+        action = {'arm': np.concatenate([action, np.zeros((3,))])}
         reward = 0.0
         for _ in range(self._action_repeat):
             obs, r, done, extra = self._env.step(action)

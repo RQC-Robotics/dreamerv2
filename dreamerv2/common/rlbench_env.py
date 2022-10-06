@@ -43,7 +43,7 @@ class ActionRescale:
     def inverse(self, action):
         """[lb, ub] -> [-1, 1]"""
         action = (action - self._inception) / self._slope
-        return np.clip(action, -1, 1)
+        return np.clip(action, -1., 1.)
 
 
 class PostponedActionMode(MoveArmThenGripper):
@@ -305,15 +305,15 @@ class RLBenchEnv:
     def obs_space(self):
         joint_shape = (_ROBOT_DOF,)
         return {
-            "image": gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
-            "depth": gym.spaces.Box(0, np.inf, self._size, dtype=np.float32),
-            "flat_point_cloud": gym.spaces.Box(-np.inf, np.inf, self._size + (3,),
-                                               dtype=np.float64),
-            "point_cloud": gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float64),
+            # "image": gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
+            # "depth": gym.spaces.Box(0, np.inf, self._size, dtype=np.float32),
+            # "flat_point_cloud": gym.spaces.Box(-np.inf, np.inf, self._size + (3,),
+            #                                    dtype=np.float64),
+            # "point_cloud": gym.spaces.Box(-np.inf, np.inf, (self._pn_number, 3), dtype=np.float64),
             "joint_positions": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
-            "joint_velocities": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
-            "joint_forces": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
-            "gripper_open": gym.spaces.Box(0, 1, (1,), dtype=np.float32),
+            # "joint_velocities": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
+            # "joint_forces": gym.spaces.Box(-np.inf, np.inf, joint_shape, dtype=np.float64),
+            # "gripper_open": gym.spaces.Box(0, 1, (1,), dtype=np.float32),
             "gripper_pose": gym.spaces.Box(-np.inf, np.inf, (7,), dtype=np.float64),
             "reward": gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
             "is_first": gym.spaces.Box(0, 1, (), dtype=bool),
@@ -324,14 +324,14 @@ class RLBenchEnv:
 
     def _observation(self, obs: Observation):
         return {
-            "depth": obs.front_depth,
-            "image": obs.front_rgb,
-            "flat_point_cloud": obs.front_point_cloud,
-            "point_cloud": self._get_pc(obs.front_point_cloud),
+            # "depth": obs.front_depth,
+            # "image": obs.front_rgb,
+            # "flat_point_cloud": obs.front_point_cloud,
+            # "point_cloud": self._get_pc(obs.front_point_cloud),
             "joint_positions": obs.joint_positions,
-            "joint_velocities": obs.joint_velocities,
-            "joint_forces": obs.joint_forces,
-            "gripper_open": np.array(obs.gripper_open, dtype=np.float32)[np.newaxis],
+            # "joint_velocities": obs.joint_velocities,
+            # "joint_forces": obs.joint_forces,
+            # "gripper_open": np.array(obs.gripper_open, dtype=np.float32)[np.newaxis],
             "gripper_pose": obs.gripper_pose
         }
 
@@ -356,8 +356,10 @@ class RLBenchEnv:
         upper_bounds[:3] = np.minimum(upper_bounds[:3], scene_bounds[1])
 
         if isinstance(self._action_mode, JointsWithDiscrete):
-            lower_bounds[:-1] /= 5.
-            upper_bounds[:-1] /= 5.
+            breakpoint()
+            lim = (upper_bounds[:-1] - lower_bounds[:-1]) / 10.
+            lower_bounds[:-1] = -lim
+            upper_bounds[:-1] = lim
 
         return lower_bounds, upper_bounds
 
@@ -381,7 +383,8 @@ class RLBenchEnv:
                     is_first=(i == 0),
                     is_last=is_last,
                     is_terminal=is_last,
-                    action=act
+                    action=act,
+                    success=is_last
                 )
                 for k, v in obs.items():
                     episode[k].append(v)
