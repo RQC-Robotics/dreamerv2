@@ -201,25 +201,23 @@ ur5:
   jit: True
   log_keys_video: ["realsense/image"]
   task: ur5_remote
-  time_limit: 10
+  time_limit: 20
   steps: 1e6
   action_repeat: 1
   encoder: { mlp_keys: ".*TCPPose", cnn_keys: "$^", pn_keys: '$^', mlp_layers: [256, 256] }
   decoder: { mlp_keys: ".*TCPPose", cnn_keys: "$^", pn_keys: '$^', mlp_layers: [256, 256] }
   actor: { layers: 2, units: 256 }
   critic: { layers: 2, units: 256 }
-  model_opt.lr: 1e-3
-  critic_opt.lr: 1e-3
-  actor_opt.lr: 1e-3
   reward_head: { layers: 2, units: 256 }
   eval_every: 30
   prefill: 150
   pretrain: 1
   train_every: 1
   clip_rewards: identity
-  replay: { capacity: 1e5, minlen: 10, maxlen: 10, prioritize_ends: False }
-  dataset: {batch: 32, length: 10}
+  replay: { capacity: 1e5, minlen: 20, maxlen: 20, prioritize_ends: False }
+  dataset: {batch: 32, length: 20}
   rssm: { hidden: 200, deter: 200, stoch: 8, discrete: 8 }
+  model_opt.lr: 3e-4
   actor_ent: 1e-4
   kl.free: 1.0
 
