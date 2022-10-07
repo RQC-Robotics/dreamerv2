@@ -189,7 +189,7 @@ rlbench:
   prefill: 1000
   pretrain: 100
   clip_rewards: identity
-  replay: { capacity: 1e5, minlen: 25, maxlen: 25, prioritize_ends: False }
+  replay: { capacity: 1e5, minlen: 25, maxlen: 25 }
   dataset: {batch: 64, length: 25}
   rssm: { hidden: 200, deter: 200 }
   model_opt.lr: 3e-4
@@ -197,33 +197,38 @@ rlbench:
   critic_opt.lr: 8e-5
   actor_ent: 1e-4
   kl.free: 1.0
+  loss_scales.kl: 0.1
 
-ur5:
+daydreamer:
 
-  jit: False
+  jit: True
   log_keys_video: ["realsense/image"]
   task: ur5_remote
-  time_limit: 20
-  steps: 1e6
+  discount: 0.95
   action_repeat: 1
-  encoder: { mlp_keys: ".*TCPPose", cnn_keys: "$^", pn_keys: '$^', mlp_layers: [128, 128] }
-  decoder: { mlp_keys: ".*TCPPose", cnn_keys: "$^", pn_keys: '$^', mlp_layers: [128, 128] }
-  actor: { layers: 2, units: 128 }
-  critic: { layers: 2, units: 128 }
-  reward_head: { layers: 2, units: 128 }
-  eval_every: 80
-  prefill: 200
+  time_limit: 100
+  steps: 1e6
+  eval_every: 1000
+  log_every: 100
+  prefill: 5000
   pretrain: 1
-  train_every: 1
+  train_every: 5
+  encoder: { mlp_keys: ".*(ActualQ|ActualTCPPose|target)", cnn_keys: "$^", pn_keys: '$^' , mlp_layers: [512, 512, 512, 512] }
+  decoder: { mlp_keys: ".*(ActualQ|ActualTCPPose|target)", cnn_keys: "$^", pn_keys: '$^' , mlp_layers: [512, 512, 512, 512] }
+  actor: { layers: 4, units: 512, act: elu, norm: 'layer', dist: auto, min_std: 0.1 }
+  critic: { layers: 4, units: 512, act: elu, norm: 'layer', dist: mse }
+  reward_head: { layers: 4, units: 512, act: elu, norm: 'layer', dist: mse }
+  discount_head: { layers: 4, units: 512, act: elu, norm: 'layer', dist: binary }
   clip_rewards: identity
-  replay: { capacity: 1e5, minlen: 20, maxlen: 20, prioritize_ends: False }
-  dataset: {batch: 10, length: 20}
-  rssm: { hidden: 200, deter: 200, stoch: 8, discrete: 8 }
-  model_opt.lr: 3e-4
-  actor_opt.lr: 8e-5
-  critic_opt.lr: 8e-5
+  replay: { capacity: 1e5, minlen: 32, maxlen: 32 }
+  dataset: {batch: 32, length: 32}
+  rssm: { hidden: 512, deter: 512, stoch: 32, discrete: 32, norm: 'layer' }
+  model_opt: { lr: 1e-4, eps: 1e-6}
+  actor_opt: { lr: 1e-4, eps: 1e-6}
+  critic_opt: { lr: 1e-4, eps: 1e-6}
   actor_ent: 1e-4
   kl.free: 1.0
+  loss_scales.kl: 0.1
 
 debug:
 

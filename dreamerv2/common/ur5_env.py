@@ -14,7 +14,7 @@ class UR5:
     Otherwise, there is no much control over remote robot.
     """
     def __init__(self, action_repeat: int = 1, size: tuple = (64, 64)):
-        address = ("10.46.3.232", 4444)
+        address = ("10.46.3.232", 4445)
         self._env = RemoteEnvClient(address)
         self._action_repeat = action_repeat
         self._size = size

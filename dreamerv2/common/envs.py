@@ -36,9 +36,9 @@ class GymWrapper:
         return {
             **spaces,
             'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
-            'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
+            'is_first': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_last': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_terminal': gym.spaces.Box(0, 1, (), dtype=bool),
         }
 
     @property
@@ -117,9 +117,9 @@ class DMC:
             'image': gym.spaces.Box(0, 255, self._size + (3,), dtype=np.uint8),
             'depth_map': gym.spaces.Box(0, np.inf, self._size+(1,), dtype=np.float32),
             'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
-            'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
+            'is_first': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_last': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_terminal': gym.spaces.Box(0, 1, (), dtype=bool),
         }
         for key, value in self._env.observation_spec().items():
             if key in self._ignored_keys:
@@ -212,9 +212,9 @@ class Atari:
             'image': gym.spaces.Box(0, 255, shape, np.uint8),
             'ram': gym.spaces.Box(0, 255, (128,), np.uint8),
             'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
-            'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
+            'is_first': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_last': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_terminal': gym.spaces.Box(0, 1, (), dtype=bool),
         }
 
     @property
@@ -270,9 +270,9 @@ class Crafter:
         spaces = {
             'image': self._env.observation_space,
             'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
-            'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
+            'is_first': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_last': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_terminal': gym.spaces.Box(0, 1, (), dtype=bool),
             'log_reward': gym.spaces.Box(-np.inf, np.inf, (), np.float32),
         }
         spaces.update({
@@ -324,9 +324,9 @@ class Dummy:
         return {
             'image': gym.spaces.Box(0, 255, (64, 64, 3), dtype=np.uint8),
             'reward': gym.spaces.Box(-np.inf, np.inf, (), dtype=np.float32),
-            'is_first': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_last': gym.spaces.Box(0, 1, (), dtype=np.bool),
-            'is_terminal': gym.spaces.Box(0, 1, (), dtype=np.bool),
+            'is_first': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_last': gym.spaces.Box(0, 1, (), dtype=bool),
+            'is_terminal': gym.spaces.Box(0, 1, (), dtype=bool),
         }
 
     @property

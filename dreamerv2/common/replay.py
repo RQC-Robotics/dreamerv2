@@ -110,7 +110,7 @@ class Replay:
         sequence = {
             k: convert(v[index: index + length])
             for k, v in episode.items() if not k.startswith('log_')}
-        sequence['is_first'] = np.zeros(len(sequence['action']), np.bool)
+        sequence['is_first'] = np.zeros(len(sequence['action']), bool)
         sequence['is_first'][0] = True
         if self._maxlen:
             assert self._minlen <= len(sequence['action']) <= self._maxlen
