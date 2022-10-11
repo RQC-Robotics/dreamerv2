@@ -180,8 +180,8 @@ rlbench:
 
   jit: True
   task: rlbench_reach_target
-  time_limit: 200
-  action_repeat: 2
+  time_limit: 100
+  action_repeat: 1
   encoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^' }
   decoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^' }
   eval_every: 5e3
@@ -189,8 +189,8 @@ rlbench:
   prefill: 10000
   pretrain: 1
   clip_rewards: identity
-  replay: { capacity: 1e6, minlen: 1, maxlen: 50 }
-  dataset: {batch: 50, length: 50}
+  replay: { capacity: 1e6, minlen: 1, maxlen: 25 }
+  dataset: {batch: 50, length: 25}
   actor_ent: 1e-4
   kl.free: 1.0
   # MWM
