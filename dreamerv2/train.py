@@ -189,11 +189,12 @@ def main():
     else:
         print('Pretrain agent.')
         for _ in range(config.pretrain):
-            if is_rlbench:
-                met = agnt.behaviour_cloning(next(train_dataset))
-                print(met)
-            else:
-                train_agent(next(train_dataset))
+            train_agent(next(train_dataset))
+
+        if is_rlbench:
+            for _ in range(config.pretrain):
+                agnt.behaviour_cloning(next(train_dataset))
+
     train_policy = lambda *args: agnt.policy(
         *args, mode='explore' if should_expl(step) else 'train')
     eval_policy = lambda *args: agnt.policy(*args, mode='eval')

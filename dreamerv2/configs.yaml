@@ -182,8 +182,8 @@ rlbench:
   task: rlbench_reach_target
   time_limit: 100
   action_repeat: 1
-  encoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^' }
-  decoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^' }
+  encoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^', mlp_layers: [512, 512, 512, 512] }
+  decoder: { mlp_keys: "$^", cnn_keys: "image", pn_keys: '$^', mlp_layers: [512, 512, 512, 512] }
   eval_every: 5e3
   log_every: 1e3
   prefill: 10000
