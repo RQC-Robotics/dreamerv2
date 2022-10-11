@@ -6,6 +6,7 @@ import traceback
 
 import gym
 import numpy as np
+import cloudpickle
 
 
 class GymWrapper:
@@ -542,7 +543,6 @@ class Async:
     _EXCEPTION = 5
 
     def __init__(self, constructor, strategy='thread'):
-        import cloudpickle
         self._pickled_ctor = cloudpickle.dumps(constructor)
         if strategy == 'process':
             import multiprocessing as mp
