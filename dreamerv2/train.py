@@ -216,11 +216,11 @@ def main():
         logger.write()
         print('Start evaluation.')
         logger.add(agnt.report(next(eval_dataset)), prefix='eval')
-        if is_rlbench or is_ur5:
+        if is_ur5 or (config.envs_parallel == "none" and is_rlbench):
             eval_driver.reset()
         eval_driver(eval_policy, episodes=config.eval_eps)
         print('Start training.')
-        if is_rlbench or is_ur5:
+        if is_ur5 or (config.envs_parallel == "none" and is_rlbench):
             train_driver.reset()
         train_driver(train_policy, steps=config.eval_every)
         agnt.save(logdir / 'variables.pkl')
