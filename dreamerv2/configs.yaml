@@ -211,32 +211,34 @@ daydreamer:
 
   jit: True
   precision: 16
-  log_keys_video: ["realsense/image"]
+  log_keys_video: ["kinect/image"]
   task: ur5_remote
   discount: 0.95
+  discount_lambda: 0.95
   action_repeat: 1
   time_limit: 100
-  steps: 1e6
+  steps: 1e7
   eval_every: 1000
   log_every: 100
-  prefill: 1e4
+  prefill: 2e3
   pretrain: 1
   train_every: 5
-  encoder: { mlp_keys: ".*(ActualQ|ActualTCPPose|target)", cnn_keys: "$^", pn_keys: '$^' , mlp_layers: [512, 512, 512, 512] }
-  decoder: { mlp_keys: ".*(ActualQ|ActualTCPPose|target)", cnn_keys: "$^", pn_keys: '$^' , mlp_layers: [512, 512, 512, 512] }
+  encoder: { mlp_keys: ".*", cnn_keys: "kinect/image", pn_keys: '$^' , mlp_layers: [512, 512, 512, 512] }
+  decoder: { mlp_keys: ".*", cnn_keys: "kinect/image", pn_keys: '$^' , mlp_layers: [512, 512, 512, 512] }
   actor: { layers: 4, units: 512, act: elu, norm: 'layer', dist: auto, min_std: 0.1 }
   critic: { layers: 4, units: 512, act: elu, norm: 'layer', dist: mse }
   reward_head: { layers: 4, units: 512, act: elu, norm: 'layer', dist: mse }
   discount_head: { layers: 4, units: 512, act: elu, norm: 'layer', dist: binary }
   clip_rewards: identity
-  replay: { capacity: 1e6, minlen: 1, maxlen: 32 }
-  dataset: {batch: 32, length: 32}
+  replay: { capacity: 1e7, minlen: 16, maxlen: 16 }
+  dataset: { batch: 50, length: 16 }
   rssm: { hidden: 512, deter: 512, stoch: 32, discrete: 32, norm: 'layer' }
   model_opt: { lr: 1e-4, eps: 1e-6}
   actor_opt: { lr: 1e-4, eps: 1e-6}
   critic_opt: { lr: 1e-4, eps: 1e-6}
   actor_ent: 1e-4
   kl.free: 1.0
+  loss_scales.kl: 0.1
 
 debug:
 
