@@ -64,9 +64,13 @@ class UR5:
     def obs_space(self):
         obs_spec = OrderedDict()
         for key, spec in self._env.observation_spec().items():
+            if spec.dtype == np.uint8:
+                low, high = 0, 255
+            else:
+                low, high = -np.inf, np.inf
             obs_spec[key] = gym.spaces.Box(
-                low=-np.inf,
-                high=np.inf,
+                low=low,
+                high=high,
                 shape=spec.shape,
                 dtype=spec.dtype
             )
@@ -74,7 +78,14 @@ class UR5:
 
     @property
     def act_space(self):
-        return {"action": self._env.action_space}
+        spec = self._env.action_spec()
+        spec = gym.spaces.Box(
+            low=spec.minimum,
+            high=spec.maximum,
+            shape=spec.shape,
+            dtype=spec.dtype
+        )
+        return {"action": spec}
 
     def __getattr__(self, item):
         return getattr(self._env, item)

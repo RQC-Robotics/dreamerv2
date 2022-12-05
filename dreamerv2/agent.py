@@ -191,15 +191,13 @@ class WorldModel(common.Module):
         for key, value in obs.items():
             if key.startswith('log_'):
                 continue
-            if value.dtype in (tf.int32, tf.float64):
-                value = value.astype(dtype)
             if value.dtype == tf.uint8:
                 value = value.astype(dtype) / 255.0 - 0.5
             if key == 'depth_map':
                 value = tf.where(tf.math.is_nan(value),
                                  tf.ones_like(value),
                                  tf.math.tanh(value / 10.))
-                value = value.astype(dtype)
+            value = value.astype(dtype)
             obs[key] = value
         obs['reward'] = {
             'identity': tf.identity,
